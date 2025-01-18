@@ -81,6 +81,7 @@ void diagnose_system(struct ProgramArgs *const program_args) {
 #endif
 
 /*
+// TODO: use capabilities to also verify privilage level in raw sockets
     // Check to see if the currently running machine's endianness
     // matches what was expected to be the target's endianness at
     // the time of compilation.
@@ -146,7 +147,7 @@ void fill_defaults(struct ProgramArgs *const program_args) {
 }
 
 int main(int argc, char *argv[]) {
-     struct ProgramArgs program_args = {0};
+    struct ProgramArgs program_args = {0};
     struct ip_hdr *ipv4_header_args = 
         (struct ip_hdr *)calloc(1, sizeof(struct ip_hdr));
 
@@ -190,8 +191,10 @@ int main(int argc, char *argv[]) {
     logger_set_level(program_args.general.logger_level);
     logger_set_timestamps(!program_args.advanced.no_log_timestamp);
 
-    int socket_descriptor = create_raw_async_socket();
-    if (socket_descriptor == EXIT_FAILURE) {
+    int socket_descriptor = setup_posix_socket(
+        true, !program_args.advanced.no_async_sock
+    ); // TODO: make raw sockets optional
+    if (socket_descriptor == -1) {
         program_args.diagnostics.unrecoverable_error = true;
         logger(LOG_INFO, "Quitting after failing to create a socket.");
         goto CLEANUP;

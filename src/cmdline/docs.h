@@ -5,7 +5,7 @@
 
 
 // NOTE: All of the command-line outputs herein conform to the RFC 678
-// plaintext document standard it is good readability practice to limit
+// plaintext document standard; it is good readability practice to limit
 // a line of code's columns to 72 characters (which include only the
 // printable characters, not line endings or cursors).
 //     I specifically chose 72 (and not some other limit like 80/132)
@@ -32,6 +32,7 @@ _Pragma ("once")
 #ifndef DOCS_H
 #define DOCS_H
 
+// TODO: Do I use ANSI code to color these?
 
 // TODO: Do I use \r\n here, or continue relying on libc?
 // TODO: Create a man.1 (man page) file using this
@@ -42,6 +43,11 @@ _Pragma ("once")
 // NOTE: Unfortunately, C preprocessor is unable to include actual .txt
 // files (which could otherwise be holding this text) into strings.
 // (C23 is apparently able to do this using the new #embed directive.)
+
+static const char HELP_TEXT_BANNER[] = "\
+test\n\
+";
+
 static const char HELP_TEXT_OVERVIEW[] = "\
 Usage: blitzping [options]\n\
 \n\
@@ -54,7 +60,7 @@ conventions, and the \"=\" sign may be omitted.\n\
 ::::::::::::::::::::::::::::::::General:::::::::::::::::::::::::::::::::\n\
 -? --help=<command>         Display this help message or more info.\n\
 -! --about                  Display information about the Program.\n\
--V --version                Display the Program version.\n\
+-V --version                Display the Program's version.\n\
 -Q --quiet                  Suppress all output except errors.\n\
 ::::::::::::::::::::::::::::::::Advanced::::::::::::::::::::::::::::::::\n\
 -$ --bypass-checks          Ignore system compatibility issues (e.g., \n\
@@ -79,6 +85,11 @@ conventions, and the \"=\" sign may be omitted.\n\
                             (May reduce performance.)\n\
    --no-cpu-prefetch        Don't prefetch packet buffer to CPU cache.\n\
                             (May reduce performance.)\n\
+   --no-zero-copy           By default, and only on GNU/Linux 2.4+, the\n\
+                            Program uses shared ring buffers as a kernel\n\
+                            bypass method; this flag will disable said\n\
+                            feature on otherwise-supported platforms.\n\
+                            (Will severely hinder performance.)\n\
 ";
 
 // TODO: Have a layer 2 ether and "raw" (no protocol) layer 3 option.
