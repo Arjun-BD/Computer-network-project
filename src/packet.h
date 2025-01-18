@@ -40,9 +40,10 @@ typedef union {
 #   if defined(_POSIX_THREADS) && _POSIX_THREADS >= 0
 #       include <pthread.h>
 #   endif
-#   include <arpa/inet.h>
+#   include <poll.h>
 #   include <sys/mman.h>
 #   include <sys/uio.h>
+#   include <arpa/inet.h>
 #elif defined(_WIN32)
 //#include <winsock2.h>
 #endif

@@ -106,15 +106,54 @@ static int send_loop(void *arg) {
         PREFETCH(iov, 0, 3);
     }
 
+    uint32_t next_ip;
+    uint16_t next_port;
+    ssize_t bytes_written;
+
+    struct pollfd pfd;
+    pfd.fd = program_args->socket;
+    pfd.events = POLLOUT;
+
     for (;;) {
-        // Randomize source IP and port
-        ip_header->saddr.address = htonl(
+        // Randomize source IP and port for the next packet
+        next_ip = htonl(
             program_args->ipv4->saddr.address
             + (rand() % ip_diff)
         );
-        tcp_header->sport = htons(rand() % 65536);
+        next_port = htons(rand() % 65536);
 
-        writev(program_args->socket, iov, 37);
+        bytes_written = writev(program_args->socket, iov, 37);
+
+        if (bytes_written == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // The socket is non-blocking and the write would block.
+                if (poll(&pfd, 1, -1) == -1) {
+                    logger(LOG_ERROR,
+                        "Failed to poll the socket: %s",
+                        strerror(errno)
+                    );
+                    break;
+                }
+            }
+            else {
+                logger(LOG_ERROR,
+                    "Failed to write packet to the socket: %s",
+                    strerror(errno)
+                );
+                break;
+            }
+        }
+        else if (bytes_written < (ssize_t)(packet_length * 37)) {
+            logger(LOG_WARN,
+                "Not all data was written; %ld bytes remain;\n"
+                "try to lower the buffer size passed to writev().",
+                (packet_length * 37) - bytes_written
+            );
+        }
+
+        // Now that the socket is ready, update the source IP and port
+        ip_header->saddr.address = next_ip;
+        tcp_header->sport = next_port;
     }
 
 

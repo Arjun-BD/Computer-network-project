@@ -248,7 +248,7 @@ void ansi_disable();
 // (i.e., 24-bit RGB), but we'll stick to basic attributes and 3-bit.
 // Get ANSI escape sequence based on current settings
 
-/*
+
 const char *ansi_get_reset();
 const char *ansi_get_red();
 const char *ansi_get_green();
@@ -305,8 +305,12 @@ bool enable_vt_mode() {
     return true;
 }
 #elif defined(_WIN32)
+// Newer Windows 10 and 11 versions support ANSI colors in the console
+// and Windows Terminal, but they have to be enabled manually:
 // https://learn.microsoft.com/en-us/windows/console/
 //     console-virtual-terminal-sequences
+//
+// TODO: Older console versions do have formatting, but it's not ANSI.
 bool enable_vt_mode() {
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
@@ -327,7 +331,6 @@ bool enable_vt_mode() {
 }
 #endif
 
-*/
 
 
 #endif // ANSI_H

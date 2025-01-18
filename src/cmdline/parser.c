@@ -131,7 +131,7 @@ static long validate_range(
     bool *const error_occured
 ) {
     errno = 0;
-    
+
     char *endptr;
     long result = strtol(value_str, &endptr, 10);
 
@@ -452,7 +452,92 @@ static const struct Option OPTIONS[] = {
 };
 
 
+struct LayerAlias {
+    const char *name;
+    osi_layer_t layer;
+};
 
+static const struct LayerAlias LAYER_ALIASES[] = {
+    // OSI (Open Systems Interconnection)
+    {"layer1", LAYER_PHYSICAL},
+    {"l1", LAYER_PHYSICAL},
+    {"physical", LAYER_PHYSICAL}, 
+    {"phys", LAYER_PHYSICAL},
+    // PDU (Protocol Data Unit)
+    {"symbol", LAYER_PHYSICAL},
+    {"bits", LAYER_PHYSICAL},
+
+    // OSI
+    {"layer2", LAYER_DATALINK},
+    {"l2", LAYER_DATALINK},
+    {"datalink", LAYER_DATALINK},
+    {"data", LAYER_DATALINK}, 
+    {"frame", LAYER_DATALINK},
+    {"layer3", LAYER_NETWORK},
+    {"l3", LAYER_NETWORK}, 
+    {"network", LAYER_NETWORK},
+    {"net", LAYER_NETWORK},
+    // PDU
+    {"packet", LAYER_NETWORK},
+
+    // OSI
+    {"layer4", LAYER_TRANSPORT},
+    {"l4", LAYER_TRANSPORT},
+    {"transport", LAYER_TRANSPORT}, 
+    {"trans", LAYER_TRANSPORT},
+    // PDU
+    {"segment", LAYER_TRANSPORT},
+    {"datagram", LAYER_TRANSPORT},
+
+    // OSI
+    {"layer5", LAYER_SESSION},
+    {"l5", LAYER_SESSION},
+    {"session", LAYER_SESSION},
+    {"sess", LAYER_SESSION},
+    // PDU
+    {"data", LAYER_SESSION},
+
+    // OSI
+    {"layer6", LAYER_PRESENTATION},
+    {"l6", LAYER_PRESENTATION},
+    {"presentation", LAYER_PRESENTATION},
+    {"pres", LAYER_PRESENTATION},
+    // PDU
+    {"data", LAYER_PRESENTATION},
+
+    // OSI
+    {"layer7", LAYER_APPLICATION},
+    {"l7", LAYER_APPLICATION},
+    {"application", LAYER_APPLICATION},
+    {"app", LAYER_APPLICATION},
+    // PDU
+    {"data", LAYER_APPLICATION}
+};
+
+static osi_layer_t current_layer = LAYER_NONE;
+
+static int str_compare_nocase(const char *s1, const char *s2) {
+    while (*s1 && *s2) {
+        int c1 = tolower((unsigned char)*s1);
+        int c2 = tolower((unsigned char)*s2);
+        if (c1 != c2) {
+            return c1 - c2;
+        }
+        s1++;
+        s2++;
+    }
+    return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+}
+
+static bool is_layer_subcommand(const char *arg) {
+    for (size_t i = 0; i < ARRAY_SIZE(LAYER_ALIASES); i++) {
+        if (str_compare_nocase(arg, LAYER_ALIASES[i].name) == 0) {
+            current_layer = LAYER_ALIASES[i].layer;
+            return true;
+        }
+    }
+    return false;
+}
 
 static bool handle_option(
     const struct Option *const cmdline_option,
@@ -467,6 +552,8 @@ static bool handle_option(
             // TODO: Handle sub-help commands.
             program_args->general.opt_info = true;
 
+            // TODO: Mention or pipe this through 'less' for limited
+            // terminal widths.
             fprintf(stderr, HELP_TEXT_ALL);
             break;
         }
@@ -775,9 +862,35 @@ int parse_args(
     for (int i = 1; i < argc; i++) {
         const char *const arg = argv[i];
 
+        if (is_layer_subcommand(arg)) {
+            continue; // Found layer command, skip to next arg
+        }
+
         if (arg[0] == '-' || arg[0] == '/') {
             const char *const opt_name = arg + (arg[1] == '-' ? 2 : 1);
             const char *opt_val = NULL;
+
+            /*
+            for (size_t j = 0; j < ARRAY_SIZE(OPTIONS); j++) {
+                if (matches_option(&OPTIONS[j], opt_name)) {
+                    // Process option if it belongs to current layer
+                    if (option_matches_layer(&OPTIONS[j],
+                        current_layer)) {
+                        process_option(
+                            &OPTIONS[j], value, program_args
+                        );
+                    } else {
+                        logger(
+                            LOG_ERROR,
+                            "Option --%s not valid for current layer",
+                            opt_name
+                        );
+                        return 1;
+                    }
+                    break;
+                }
+            }
+            */
 
             for (size_t j = 0; j < ARRAY_SIZE(OPTIONS); j++) {
                 const size_t opt_len =

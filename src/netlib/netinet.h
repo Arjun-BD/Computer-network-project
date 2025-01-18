@@ -63,9 +63,9 @@ _Pragma ("once")
 // endianness control is crucial. (C23 N3030)
 // Check for C23 support
 #if __STDC_VERSION__ >= 202300L // C23 or later
-#   define ENUM_UNDERLYING(type) : type
+#    define ENUM_UNDERLYING(type) : type
 #else // Fallback for older standards (e.g., C11)
-#   define ENUM_UNDERLYING(type) __attribute__((packed))
+#    define ENUM_UNDERLYING(type) __attribute__((packed))
 #endif
 
 
@@ -78,15 +78,32 @@ _Pragma ("once")
 
 
 /* Protocol Definitions */
+// TODO: Separete protos into layer names in their folders.
 #include "./protos/ip.h"
 #include "./protos/tcp.h"
 
-typedef enum osi_layer {
-    LAYER_2,
-    LAYER_3,
-    LAYER_4
+typedef enum OsiLayer {
+    LAYER_0 = 0, // None (doesn't exist)
+    LAYER_1 = 1, // MAC/Ethernet
+    LAYER_2 = 2, // IPv4/IPv6
+    LAYER_3 = 3, // 
+    LAYER_4 = 4, // 
+    LAYER_5 = 5, // 
+    LAYER_6 = 6, // 
+    LAYER_7 = 7, // 
+
+    // Aliases
+    LAYER_NONE         = LAYER_0,
+    LAYER_PHYSICAL     = LAYER_1,
+    LAYER_DATALINK     = LAYER_2,
+    LAYER_NETWORK      = LAYER_3,
+    LAYER_TRANSPORT    = LAYER_4,
+    LAYER_SESSION      = LAYER_5,
+    LAYER_PRESENTATION = LAYER_6,
+    LAYER_APPLICATION  = LAYER_7
 } osi_layer_t;
 
+// TODO: We don't have namespaces, but can we somehow group this in OSI?
 typedef enum osi_protocol {
     // Layer 3 (Network)
     PROTO_L3_RAW,
@@ -96,7 +113,7 @@ typedef enum osi_protocol {
     PROTO_L4_RAW,
     PROTO_L4_TCP,
     PROTO_L4_UDP,
-    PROTO_L4_ICMP // ICMP shouldn't belong in L3.
+    PROTO_L4_ICMP // TODO: ICMP shouldn't belong in L4.
 } osi_proto_t;
 
 
