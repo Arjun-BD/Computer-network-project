@@ -31,7 +31,7 @@ typedef union {
 #include <time.h>
 // C11 threads (glibc >=2.28, musl >=1.1.5, Windows SDK >~10.0.22620)
 #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
-#   include <threads.h>
+#include <threads.h>
 #endif
 
 #if defined(_POSIX_C_SOURCE)
@@ -40,15 +40,17 @@ typedef union {
 #   if defined(_POSIX_THREADS) && _POSIX_THREADS >= 0
 #       include <pthread.h>
 #   endif
-#   include <poll.h>
-#   include <sys/mman.h>
-#   include <sys/uio.h>
-#   include <arpa/inet.h>
+#include <poll.h>
+#include <sys/mman.h>
+#include <sys/uio.h>
+#include <arpa/inet.h>
 #elif defined(_WIN32)
 //#include <winsock2.h>
 #endif
 
-extern int errno; // Declared in <errno.h>
+// extern int errno; // Declared in <errno.h>
+#include <errno.h>
+
 
 #define IP_PKT_MTU 1500 // Same as Ethernet II MTU (bytes)
 #define MAX_THREADS 100 // Arbitrary limit (TODO: Remove?)

@@ -159,11 +159,9 @@ int main(int argc, char *argv[]) {
     }
     program_args.ipv4 = ipv4_header_args;
 
-
     diagnose_system(&program_args);
 
     fill_defaults(&program_args);
-
     /*if (!diagnose_system(&program_args)) {
         // TODO: Add an argument to let the user continue regardless.
         //if () {
@@ -203,7 +201,6 @@ int main(int argc, char *argv[]) {
     program_args.socket = socket_descriptor;
 
     send_packets(&program_args);
-
 
     if (shutdown(socket_descriptor, SHUT_RDWR) == -1) {
         logger(LOG_WARN, "Socket shutdown failed: %s", strerror(errno));

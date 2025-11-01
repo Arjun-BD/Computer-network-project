@@ -253,13 +253,13 @@ int send_packets(struct ProgramArgs *const program_args) {
 #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
         //thrd_t *threads =
         //    malloc(args.num_threads * sizeof (thrd_t));
+        logger(LOG_INFO, "Spawning %u threads.", num_threads);
         thrd_t threads[MAX_THREADS];
 
         for (unsigned int i = 0; i < num_threads; i++) {
             int thread_status = thrd_create(
                 &threads[i], send_loop, program_args
             );
-
             if (thread_status != thrd_success) {
                 logger(LOG_ERROR, "Failed to spawn thread %d.", i);
                 // Cleanup already-created threads

@@ -26,6 +26,7 @@
 #if defined(_POSIX_C_SOURCE)
 #   include <arpa/inet.h>
 #   include <sys/uio.h>
+#include <errno.h>
 #   include <unistd.h>
 #elif defined(_WIN32)
 //#   include <winsock2.h>
@@ -40,7 +41,7 @@
 #define PORT_MIN 0
 #define PORT_MAX 65535 // 2^16 - 1
 
-extern int errno; // Declared in <errno.h>
+// extern int errno; // Declared in <errno.h>
 
 
 int parse_args(

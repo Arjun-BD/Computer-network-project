@@ -30,7 +30,8 @@
 //#include <winsock2.h>
 #endif
 
-extern int errno; // Declared in <errno.h>
+// extern int errno; // Declared in <errno.h>
+#include <errno.h>
 
 
 int setup_posix_socket(const bool is_raw, const bool is_async);
