@@ -75,7 +75,20 @@ typedef struct ProgramArgs {
     // TCP
     struct tcp_hdr *tcp;
     // TODO: UDP
-    // TODO: ICMP
+        struct udp_hdr *udp;
+    struct {
+        bool override_checksum;
+        bool override_length;
+    } udp_misc;
+
+    // ICMP
+    struct icmp_hdr *icmp;
+    struct {
+        bool override_checksum;
+        uint8_t type;
+        uint8_t code;
+    } icmp_misc;
+    
 } program_args_t;
 
 

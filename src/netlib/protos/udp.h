@@ -9,7 +9,20 @@ _Pragma ("once")
 
 
 
+struct udp_hdr {
+    uint16_t sport;
+    uint16_t dport;
+    uint16_t len;
+    uint16_t chksum;
+};
 
+struct icmp_hdr {
+    uint8_t type;
+    uint8_t code;
+    uint16_t chksum;
+    uint16_t id;
+    uint16_t seq;
+};
 
 #endif // UDP_H
 

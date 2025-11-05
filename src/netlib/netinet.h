@@ -81,6 +81,7 @@ _Pragma ("once")
 // TODO: Separete protos into layer names in their folders.
 #include "./protos/ip.h"
 #include "./protos/tcp.h"
+#include "./protos/udp.h"
 
 typedef enum OsiLayer {
     LAYER_0 = 0, // None (doesn't exist)
