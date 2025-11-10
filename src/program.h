@@ -53,6 +53,8 @@ typedef struct ProgramArgs {
         bool bypass_checks;
         bool no_log_timestamp;
         unsigned int num_threads;
+        bool tracert;
+        bool use_dpdk;
         bool native_threads;
         unsigned int buffer_size;
         bool no_async_sock;

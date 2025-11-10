@@ -148,32 +148,47 @@ void fill_defaults(struct ProgramArgs *const program_args) {
 
 int main(int argc, char *argv[]) {
     struct ProgramArgs program_args = {0};
-    struct ip_hdr *ipv4_header_args = 
-        (struct ip_hdr *)calloc(1, sizeof(struct ip_hdr));
+    struct ip_hdr *ipv4_header_args =
+            (struct ip_hdr *)calloc(1, sizeof(struct ip_hdr));
 
     if (ipv4_header_args == NULL) {
         program_args.diagnostics.unrecoverable_error = true;
         logger(LOG_ERROR,
-            "Failed to allocate memory for program arguments.");
+               "Failed to allocate memory for program arguments.");
         goto CLEANUP;
     }
     program_args.ipv4 = ipv4_header_args;
 
-    diagnose_system(&program_args);
+    bool dpdk_mode = false;
+    for (int i = 1; i < argc; i++) {
+        if (argv[i] && strcmp(argv[i], "--use-dpdk") == 0) {
+            dpdk_mode = true;
+            break;
+        }
+    }
 
-    fill_defaults(&program_args);
-    /*if (!diagnose_system(&program_args)) {
-        // TODO: Add an argument to let the user continue regardless.
-        //if () {
+    int eal_args_consumed = 0;
+    int socket_descriptor = -1;
+
+    if (dpdk_mode) {
+        logger(LOG_INFO, "Initializing DPDK environment...");
+        eal_args_consumed = setup_dpdk_environment(argc, argv);
+        argc--;
+        for (int i = eal_args_consumed + 1; i < argc; i++)
+            argv[i] = argv[i + 1];
+
+        if (eal_args_consumed >= 0) {
+            logger(LOG_INFO, "DPDK EAL initialized successfully.");
+            socket_descriptor = setup_dpdk_socket(0); // port 0 by default
+        } else {
+            logger(LOG_ERROR, "Failed to initialize DPDK EAL; see EAL errors above.");
             program_args.diagnostics.unrecoverable_error = true;
             goto CLEANUP;
-        //}
-        logger(LOG_WARN,
-            "System verification failed but was told to continue\n"
-            "regardless; expect potentially undefined behavior.\n"
-        );
-    }*/
+        }
+    }
 
+    diagnose_system(&program_args);
+    fill_defaults(&program_args);
 
     if (parse_args(argc, argv, &program_args) != 0) {
         program_args.diagnostics.unrecoverable_error = true;
@@ -181,17 +196,20 @@ int main(int argc, char *argv[]) {
         goto CLEANUP;
     }
     else if (program_args.general.opt_info) {
-        // User just wanted to see the --help, --about, etc. text.
         goto CLEANUP;
     }
 
+    program_args.advanced.use_dpdk = dpdk_mode;
 
     logger_set_level(program_args.general.logger_level);
     logger_set_timestamps(!program_args.advanced.no_log_timestamp);
 
-    int socket_descriptor = setup_posix_socket(
-        true, !program_args.advanced.no_async_sock
-    ); // TODO: make raw sockets optional
+    if (socket_descriptor == -1) {
+        socket_descriptor = setup_posix_socket(
+                true, !program_args.advanced.no_async_sock
+        );
+    }
+
     if (socket_descriptor == -1) {
         program_args.diagnostics.unrecoverable_error = true;
         logger(LOG_INFO, "Quitting after failing to create a socket.");

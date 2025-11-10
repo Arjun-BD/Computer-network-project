@@ -314,6 +314,8 @@ enum OptionKind {
     OPTION_LOGGER_LEVEL,
     OPTION_NO_LOG_TIMESTAMP,
     OPTION_NUM_THREADS,
+    OPTION_TRACERT,
+    OPTION_USE_DPDK,
     OPTION_NATIVE_THREADS,
     OPTION_BUFFER_SIZE,
     OPTION_NO_ASYNC_SOCK,
@@ -441,6 +443,8 @@ static const struct Option OPTIONS[] = {
     {'\0', "rst", false, OPTION_NONE},
     {'\0', "syn", false, OPTION_NONE},
     {'\0', "fin", false, OPTION_NONE},
+    {'\0', "tracert", false, OPTION_TRACERT},
+    {'\0', "use-dpdk", false, OPTION_USE_DPDK},
     {'\0', "window", true, OPTION_NONE},
     /* chksum */
     {'\0', "urg-ptr", true, OPTION_NONE},
@@ -594,6 +598,14 @@ static bool handle_option(
                 (unsigned int)validate_range(
                     value, 0, UINT_MAX, cmdline_option->name,
                     &error_occured);
+            break;
+        }
+        case OPTION_TRACERT: {
+            program_args->advanced.tracert = true;
+            break;
+        }
+        case OPTION_USE_DPDK: {
+            program_args->advanced.use_dpdk = true;
             break;
         }
         case OPTION_NATIVE_THREADS: {

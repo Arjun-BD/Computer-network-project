@@ -16,6 +16,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+// ---------------------------------------------------------------------
+// DPDK mode (optional compile-time enable)
+// ---------------------------------------------------------------------
+#include <rte_eal.h>
+#include <rte_ethdev.h>
+#include <rte_mbuf.h>
+#include <rte_mempool.h>
+#include <rte_cycles.h>
 
 #if defined(_POSIX_C_SOURCE)
 #   include <fcntl.h>
@@ -36,6 +44,10 @@
 
 int setup_posix_socket(const bool is_raw, const bool is_async);
 
+int setup_dpdk_environment(int argc, char **argv);
+int setup_dpdk_socket(uint16_t port_id);
+int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len);
+int dpdk_receive_packets(uint16_t port_id);
 
 #endif // SOCKET_H
 

@@ -16,6 +16,21 @@ C_STD ?= c11
 # For more information on these extremely confusing "standards,"
 # check https://www.man7.org/linux/man-pages/man7/standards.7.html
 POSIX_VER ?= 200112L
+CFLAGS += -mssse3
+CXXFLAGS += -mssse3
+
+export PKG_CONFIG_PATH := /usr/local/lib/pkgconfig:$(PKG_CONFIG_PATH)
+
+# DPDK flags (from pkg-config if available)
+DPDK_CFLAGS := $(shell pkg-config --cflags libdpdk 2>/dev/null)
+DPDK_LIBS   := $(shell pkg-config --libs  libdpdk 2>/dev/null)
+
+# Fallback if pkg-config didn't find it (adjust PREFIX if you installed elsewhere)
+ifeq ($(strip $(DPDK_CFLAGS)),)
+DPDK_PREFIX ?= /usr/local
+DPDK_CFLAGS := -I$(DPDK_PREFIX)/include
+DPDK_LIBS   := -L$(DPDK_PREFIX)/lib -ldpdk -lbsd
+endif
 
 # LLVM's target triplets are more straightforward for cross-compiling;
 # that is why Blitzping uses Clang by default.  However, this codebase
@@ -81,6 +96,7 @@ endif
 # The 'platform' option will automatically choose an available one.
 # (GCC lacks this option and always uses libgcc.)
 LDOPT = \
+    -Wl,-rpath,/usr/local/lib
 	#-static -static-libgcc -lpthread
 
 ifneq (,$(findstring gcc,$(CC)))
@@ -148,6 +164,8 @@ else
 	CCOPT += -D TARGET_SOFT_FLOAT=0
 endif
 
+CCOPT += $(DPDK_CFLAGS)
+LDOPT += $(DPDK_LIBS)
 
 #
 # Make Targets
@@ -163,12 +181,12 @@ help:
 	@echo "  clean : Remove all built artefacts."
 
 $(OUTDIR)/$(NAME): $(OBJS)
-	$(CC) $(CCOPT) $(LDOPT) -o $@ $^
+	$(CC) $(CCOPT) -o $@ $^ $(LDOPT)
 	@file $(OUTDIR)/$(NAME)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	mkdir -p $(dir $@)
-	$(CC) $(CCOPT) -c $< -o $@
+	$(CC) $(CFLAGS) $(CCOPT) -c $< -o $@
 
 strip: $(OUTDIR)/$(NAME)
 	@ls -l $(OUTDIR)/$(NAME)

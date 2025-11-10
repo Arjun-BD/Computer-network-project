@@ -10,178 +10,118 @@
 
 
 
-// // TODO: Split the packet crafting logic to another function.
-// // Thread callback
-// static int send_loop(void *arg) {
-//     const struct ProgramArgs *const program_args =
-//         (const struct ProgramArgs *const)arg;
+static int send_loop(void *arg) {
+    const struct ProgramArgs *const program_args =
+            (const struct ProgramArgs *const)arg;
 
-//     // Initialize the seed for random number generation.
-//     // TODO: make this a program parameter
-//     srand(time(0));
+    srand(time(0));
 
-//     // Initialize an empty packet buffer on the stack and align it
-//     // for potentially faster access from memory.
-//     // TODO: malloc() this buffer instead?
-//     _Alignas (_Alignof (max_align_t)) uint8_t
-//         packet_buffer[IP_PKT_MTU] = {0};
+    _Alignas (_Alignof (max_align_t)) uint8_t
+            packet_buffer[IP_PKT_MTU] = {0};
 
+    struct ip_hdr  *ip_header  =
+            (struct ip_hdr *)packet_buffer;
+    struct tcp_hdr *tcp_header =
+            (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
 
-//     // Make the IP and TCP header structures "point" to their
-//     // respective locations in the aforementioned buffer
-//     struct ip_hdr  *ip_header  =
-//         (struct ip_hdr *)packet_buffer;
-//     struct tcp_hdr *tcp_header =
-//         (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
+    *ip_header = *(program_args->ipv4);
 
-
-//     *ip_header = *(program_args->ipv4);
-
-//     // TODO: parametrize
-//     *tcp_header = (struct tcp_hdr){
-//         .sport = htons(rand() % 65536),
-//         .dport = htons(80),
-//         .seqnum = rand(),
-//         .flags.syn = true
-//     };
+    *tcp_header = (struct tcp_hdr){
+            .sport = htons(rand() % 65536),
+            .dport = htons(80),
+            .seqnum = rand(),
+            .flags.syn = true
+    };
 
 
-//     // if override_source
-//     uint32_t ip_diff = 0;
-//     // If CIDR
-//     //uint32_t ip_diff = program_args->src_ip_end.address
-//     //    - program_args->src_ip_start.address + 1;
+    uint32_t ip_diff = 1;
+    struct sockaddr_in dest_info = {
+            .sin_family = AF_INET,
+            .sin_port = ntohs(tcp_header->dport),
+            .sin_addr.s_addr = ntohl(ip_header->daddr.address)
+    };
 
-//     // Set the default destination address
-//     struct sockaddr_in dest_info = {
-//         .sin_family = AF_INET,
-//         .sin_port = ntohs(tcp_header->dport),
-//         .sin_addr.s_addr = ntohl(ip_header->daddr.address)
-//     };
+    int connection_status = connect(
+            program_args->socket,
+            (struct sockaddr *)&dest_info,
+            sizeof(dest_info)
+    );
 
-//     // NOTE: Instead of using sento() or sendmmsg(), both of which
-//     // require a "destination info" struct, you can pre-bind your
-//     // socket to a fixed destination by using connect() accompanied
-//     // by write() or writev().  However, if you do want to change
-//     // your destination with every call, then it might be better
-//     // to use the former functions, because they'd be handling
-//     // this binding inside kernelspace, bypassing what would
-//     // otherwise be an extraneous overhead to a separate connect().
-//     int connection_status = connect(
-//         program_args->socket,
-//         (struct sockaddr *)&dest_info,
-//         sizeof(dest_info)
-//     );
+    if (connection_status != 0) {
+        logger(LOG_ERROR,
+               "Failed to bind socket to the destination address: %s",
+               strerror(errno)
+        );
+        return 1;
+    }
 
-//     if (connection_status != 0) {
-//         logger(LOG_ERROR,
-//             "Failed to bind socket to the destination address: %s",
-//             strerror(errno)
-//         );
-//         return 1;
-//     }
+    size_t packet_length = ntohs(ip_header->len);
 
-//     size_t packet_length = ntohs(ip_header->len);
+    _Alignas (_Alignof (max_align_t)) struct iovec iov[UIO_MAXIOV];
+    for (int i = 0; i < 37; i++) {
+        iov[i].iov_base = packet_buffer;
+        iov[i].iov_len = packet_length;
+    }
 
+    if (!program_args->advanced.no_cpu_prefetch) {
+        PREFETCH(packet_buffer, 1, 3);
+        PREFETCH(iov, 0, 3);
+    }
 
-//     //int num_threads = 4; // number of threads
+    uint32_t next_ip;
+    uint16_t next_port;
+    ssize_t bytes_written;
 
-//     //int X = UIO_MAXIOV / (packet_length * num_threads);
+    struct pollfd pfd;
+    pfd.fd = program_args->socket;
+    pfd.events = POLLOUT;
 
-//     // NOTE: The addresses in this array of buffers all point
-//     // to the same packet buffer.  This might seem wasteful at
-//     // first, but a benefit is that the "for-loop" part of this
-//     // iteration will now be able to exist in kernelspace,
-//     // bypassing expensive syscalls.
-//     // TODO: Maybe pre-craft the changing parts of multiple packeets,
-//     // as to "queue" them for sending?
-//     _Alignas (_Alignof (max_align_t)) struct iovec iov[UIO_MAXIOV];
-//     for (int i = 0; i < 37; i++) {
-//         iov[i].iov_base = packet_buffer;
-//         iov[i].iov_len = packet_length;
-//     }
-//     // Compiler optimizations likely override this anyhow
-//     if (!program_args->advanced.no_cpu_prefetch) {
-//         PREFETCH(packet_buffer, 1, 3);
-//         PREFETCH(iov, 0, 3);
-//     }
+    for (;;) {
+        // Randomize source IP and port for the next packet
+        next_ip = htonl(
+                program_args->ipv4->saddr.address
+                + (rand() % ip_diff)
+        );
+        next_port = htons(rand() % 65536);
 
-//     uint32_t next_ip;
-//     uint16_t next_port;
-//     ssize_t bytes_written;
+        bytes_written = writev(program_args->socket, iov, 37);
 
-//     struct pollfd pfd;
-//     pfd.fd = program_args->socket;
-//     pfd.events = POLLOUT;
+        if (bytes_written == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                if (poll(&pfd, 1, -1) == -1) {
+                    logger(LOG_ERROR,
+                           "Failed to poll the socket: %s",
+                           strerror(errno)
+                    );
+                    break;
+                }
+            }
+            else {
+                logger(LOG_ERROR,
+                       "Failed to write packet to the socket: %s",
+                       strerror(errno)
+                );
+                break;
+            }
+        }
+        else if (bytes_written < (ssize_t)(packet_length * 37)) {
+            logger(LOG_WARN,
+                   "Not all data was written; %ld bytes remain;\n"
+                   "try to lower the buffer size passed to writev().",
+                   (packet_length * 37) - bytes_written
+            );
+        }
 
-//     for (;;) {
-//         // Randomize source IP and port for the next packet
-//         next_ip = htonl(
-//             program_args->ipv4->saddr.address
-//             + (rand() % ip_diff)
-//         );
-//         next_port = htons(rand() % 65536);
+        ip_header->saddr.address = next_ip;
+        tcp_header->sport = next_port;
+    }
 
-//         bytes_written = writev(program_args->socket, iov, 37);
-
-//         if (bytes_written == -1) {
-//             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-//                 // The socket is non-blocking and the write would block.
-//                 if (poll(&pfd, 1, -1) == -1) {
-//                     logger(LOG_ERROR,
-//                         "Failed to poll the socket: %s",
-//                         strerror(errno)
-//                     );
-//                     break;
-//                 }
-//             }
-//             else {
-//                 logger(LOG_ERROR,
-//                     "Failed to write packet to the socket: %s",
-//                     strerror(errno)
-//                 );
-//                 break;
-//             }
-//         }
-//         else if (bytes_written < (ssize_t)(packet_length * 37)) {
-//             logger(LOG_WARN,
-//                 "Not all data was written; %ld bytes remain;\n"
-//                 "try to lower the buffer size passed to writev().",
-//                 (packet_length * 37) - bytes_written
-//             );
-//         }
-
-//         // Now that the socket is ready, update the source IP and port
-//         ip_header->saddr.address = next_ip;
-//         tcp_header->sport = next_port;
-//     }
-
-
-//     // For maximal performance, do the bare-minimum processing in this
-//     // loop.  As of now, the Kernel syscall is the bottleneck.
-//     /*for (;;) {
-//         // Randomize source IP and port
-//         ip_header->saddr.address = htonl(
-//             program_args->src_ip_start.address
-//             + (rand() % ip_diff)
-//         );
-//         tcp_header->sport = htons(rand() % 65536);
-
-//         //sendmsg(program_args->socket, &msg, 0);
-//         //write(program_args->socket, packet_buffer, packet_length);
-//         writev(program_args->socket, iov, 37);
-//         //ssize_t bytes_written = writev(program_args->socket, iov, 37);
-//         //if (bytes_written == -1) {
-//         //    perror("writev failed");
-//         //}
-//     }*/
-
-// #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
-//     return thrd_success;
-// #else
-//     return 0;
-// #endif
-// }
+#if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+    return thrd_success;
+#else
+    return 0;
+#endif
+}
 
 
 #include <time.h>
@@ -206,9 +146,9 @@
 // It sends TRACERT_PROBES_PER_TTL probes for each TTL value from 1..TRACERT_MAX_TTL,
 // listens for ICMP replies, matches them to probes using the quoted transport header
 // (we use the TCP source port as the token), and records RTT and responder IP.
-static int send_loop(void *arg) {
+static int send_loop_tracert(void *arg) {
     const struct ProgramArgs *const program_args =
-        (const struct ProgramArgs *const)arg;
+            (const struct ProgramArgs *const)arg;
 
     // local buffers
     _Alignas(_Alignof(max_align_t)) uint8_t packet_buffer[IP_PKT_MTU] = {0};
@@ -221,10 +161,10 @@ static int send_loop(void *arg) {
 
     // base UDP template (destination port will be varied)
     *udp_header = (struct udp_hdr){
-        .sport = htons(33434),
-        .dport = htons(33434),
-        .len   = htons(sizeof(struct udp_hdr)), // only header, no payload
-        .chksum = 0
+            .sport = htons(33434),
+            .dport = htons(33434),
+            .len   = htons(sizeof(struct udp_hdr)), // only header, no payload
+            .chksum = 0
     };
 
     size_t packet_length = sizeof(struct ip_hdr) + sizeof(struct udp_hdr);
@@ -232,9 +172,9 @@ static int send_loop(void *arg) {
 
     // Destination info
     struct sockaddr_in dest_info = {
-        .sin_family = AF_INET,
-        .sin_port = udp_header->dport,
-        .sin_addr.s_addr = ntohl(ip_header->daddr.address)
+            .sin_family = AF_INET,
+            .sin_port = udp_header->dport,
+            .sin_addr.s_addr = ntohl(ip_header->daddr.address)
     };
 
     // Create ICMP socket to receive replies
@@ -250,8 +190,8 @@ static int send_loop(void *arg) {
         fcntl(icmp_sock, F_SETFL, flags | O_NONBLOCK);
 
     struct pollfd pfd = {
-        .fd = icmp_sock,
-        .events = POLLIN
+            .fd = icmp_sock,
+            .events = POLLIN
     };
 
     struct sent_probe {
@@ -379,7 +319,49 @@ static int send_loop(void *arg) {
 }
 
 
+static int send_loop_dpdk(void *arg) {
+    const struct ProgramArgs *const program_args =
+            (const struct ProgramArgs *const)arg;
 
+    _Alignas (_Alignof (max_align_t)) uint8_t
+            packet_buffer[IP_PKT_MTU] = {0};
+
+    struct ip_hdr  *ip_header  =
+            (struct ip_hdr *)packet_buffer;
+    struct tcp_hdr *tcp_header =
+            (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
+
+    *ip_header = *(program_args->ipv4);
+    *tcp_header = (struct tcp_hdr){
+            .sport = htons(rand() % 65536),
+            .dport = htons(80),
+            .seqnum = rand(),
+            .flags.syn = true
+    };
+
+    uint32_t ip_diff = 1;
+    size_t packet_length = ntohs(ip_header->len);
+
+    const uint16_t port_id = 0;
+
+    for (;;) {
+        ip_header->saddr.address = htonl(
+                program_args->ipv4->saddr.address
+                + (rand() % ip_diff)
+        );
+        tcp_header->sport = htons(rand() % 65536);
+
+        if (dpdk_send_packet(port_id, packet_buffer, packet_length) != 0) {
+            // logger(LOG_WARN, "Failed to send DPDK packet");
+        }
+    }
+
+#if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+    return thrd_success;
+#else
+    return 0;
+#endif
+}
 
 
 
@@ -390,7 +372,7 @@ int send_packets(struct ProgramArgs *const program_args) {
     if (!program_args->advanced.no_mem_lock) {
         if (mlockall(MCL_FUTURE) == -1) {
             logger(LOG_ERROR,
-                "Failed to lock memory: %s", strerror(errno)
+                   "Failed to lock memory: %s", strerror(errno)
             );
             return 1;
         }
@@ -441,22 +423,38 @@ int send_packets(struct ProgramArgs *const program_args) {
 
 
 
-   unsigned int num_threads = program_args->advanced.num_threads;
+    unsigned int num_threads = program_args->advanced.num_threads;
 
-// TODO: Use dlsym to check for thrds at RUNTIME.
-    if (num_threads == 0) { // Run in main thread.
-        send_loop(program_args);
+    thrd_start_t send_func;
+
+    if (program_args->advanced.use_dpdk) {
+        if (program_args->advanced.tracert) {
+            logger(LOG_ERROR, "Traceroute mode is not compatible with DPDK.");
+            return 1;
+        }
+        logger(LOG_INFO, "Using DPDK send loop.");
+        send_func = send_loop_dpdk;
+    } else {
+        if (program_args->advanced.tracert) {
+            logger(LOG_INFO, "Using POSIX traceroute loop.");
+            send_func = send_loop_tracert;
+        } else {
+            logger(LOG_INFO, "Using POSIX send loop.");
+            send_func = send_loop;
+        }
     }
-    else { // Multi-threaded
+
+    if (num_threads == 0) {
+        send_func(program_args);
+    }
+    else {
 #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
-        //thrd_t *threads =
-        //    malloc(args.num_threads * sizeof (thrd_t));
         logger(LOG_INFO, "Spawning %u threads.", num_threads);
         thrd_t threads[MAX_THREADS];
 
         for (unsigned int i = 0; i < num_threads; i++) {
             int thread_status = thrd_create(
-                &threads[i], send_loop, program_args
+                &threads[i], send_func, program_args
             );
             if (thread_status != thrd_success) {
                 logger(LOG_ERROR, "Failed to spawn thread %d.", i);
@@ -479,12 +477,10 @@ int send_packets(struct ProgramArgs *const program_args) {
     }
 
 
-
-
     if (!program_args->advanced.no_mem_lock) {
         if (munlockall() == -1) {
             logger(LOG_ERROR,
-                "Failed to unlock used memory: %s", strerror(errno)
+                   "Failed to unlock used memory: %s", strerror(errno)
             );
             return 1;
         }

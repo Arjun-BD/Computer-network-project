@@ -208,6 +208,74 @@ int setup_mmap_socket(const char *const interface_name) {
 
 #endif /* defined(_POSIX_C_SOURCE) */
 
+#include <rte_config.h>
+#include <rte_eal.h>
+#include <rte_ethdev.h>
+#include <rte_mbuf.h>
+
+#define NUM_MBUFS 8191
+#define MBUF_CACHE_SIZE 250
+#define BURST_SIZE 32
+
+static struct rte_mempool *mbuf_pool = NULL;
+
+int setup_dpdk_environment(int argc, char **argv) {
+    int ret = rte_eal_init(argc, argv);
+    if (ret < 0) {
+        logger(LOG_CRIT, "Failed to initialize DPDK EAL");
+        return -1;
+    }
+
+    logger(LOG_INFO, "DPDK: Setting up");
+
+    mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS * rte_eth_dev_count_avail(),
+                                        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
+                                        rte_socket_id());
+    if (!mbuf_pool) {
+        logger(LOG_CRIT, "Failed to create mbuf pool");
+        return -1;
+    }
+    return 0;
+}
+
+int setup_dpdk_socket(uint16_t port_id) {
+    struct rte_eth_conf port_conf = {0};
+    const uint16_t nb_rxd = 128;
+    const uint16_t nb_txd = 512;
+
+    int ret = rte_eth_dev_configure(port_id, 1, 1, &port_conf);
+    if (ret < 0) {
+        logger(LOG_CRIT, "DPDK: device configure failed");
+        return ret;
+    }
+
+    rte_eth_rx_queue_setup(port_id, 0, nb_rxd, rte_eth_dev_socket_id(port_id), NULL, mbuf_pool);
+    rte_eth_tx_queue_setup(port_id, 0, nb_txd, rte_eth_dev_socket_id(port_id), NULL);
+
+    ret = rte_eth_dev_start(port_id);
+    if (ret < 0) {
+        logger(LOG_CRIT, "DPDK: device start failed");
+        return ret;
+    }
+
+    logger(LOG_INFO, "DPDK: Port %u started", port_id);
+    return ret;
+}
+
+int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len) {
+    struct rte_mbuf *m = rte_pktmbuf_alloc(mbuf_pool);
+    if (!m) return -1;
+
+    void *dst = rte_pktmbuf_append(m, len);
+    memcpy(dst, pkt_data, len);
+
+    uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &m, 1);
+    if (nb_tx == 0) {
+        rte_pktmbuf_free(m);
+        return -1;
+    }
+    return 0;
+}
 
 // ---------------------------------------------------------------------
 // END OF FILE: socket.c
