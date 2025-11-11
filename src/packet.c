@@ -21,51 +21,37 @@ static int send_loop(void *arg) {
 
     struct ip_hdr  *ip_header  =
             (struct ip_hdr *)packet_buffer;
-    struct tcp_hdr *tcp_header =
-            (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
+    struct udp_hdr *udp_header =
+            (struct udp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
 
     *ip_header = *(program_args->ipv4);
+    ip_header->proto = IPPROTO_UDP;
 
-    *tcp_header = (struct tcp_hdr){
+    *udp_header = (struct udp_hdr){
             .sport = htons(rand() % 65536),
             .dport = htons(80),
-            .seqnum = rand(),
-            .flags.syn = true
+            .len = htons(sizeof(struct udp_hdr)),
+            .chksum = 0
     };
+
+    size_t packet_length = sizeof(struct ip_hdr) + sizeof(struct udp_hdr);
+    ip_header->len = htons(packet_length);
 
 
     uint32_t ip_diff = 1;
+
     struct sockaddr_in dest_info = {
             .sin_family = AF_INET,
-            .sin_port = ntohs(tcp_header->dport),
+            .sin_port = udp_header->dport,
+            // --- THIS IS THE FIX ---
+            // Re-add ntohl() to match the program's convention
             .sin_addr.s_addr = ntohl(ip_header->daddr.address)
     };
 
-    int connection_status = connect(
-            program_args->socket,
-            (struct sockaddr *)&dest_info,
-            sizeof(dest_info)
-    );
-
-    if (connection_status != 0) {
-        logger(LOG_ERROR,
-               "Failed to bind socket to the destination address: %s",
-               strerror(errno)
-        );
-        return 1;
-    }
-
-    size_t packet_length = ntohs(ip_header->len);
-
-    _Alignas (_Alignof (max_align_t)) struct iovec iov[UIO_MAXIOV];
-    for (int i = 0; i < 37; i++) {
-        iov[i].iov_base = packet_buffer;
-        iov[i].iov_len = packet_length;
-    }
+    // --- Removed connectionless connect() call ---
 
     if (!program_args->advanced.no_cpu_prefetch) {
         PREFETCH(packet_buffer, 1, 3);
-        PREFETCH(iov, 0, 3);
     }
 
     uint32_t next_ip;
@@ -77,14 +63,20 @@ static int send_loop(void *arg) {
     pfd.events = POLLOUT;
 
     for (;;) {
-        // Randomize source IP and port for the next packet
         next_ip = htonl(
-                program_args->ipv4->saddr.address
+                ntohl(program_args->ipv4->saddr.address)
                 + (rand() % ip_diff)
         );
         next_port = htons(rand() % 65536);
 
-        bytes_written = writev(program_args->socket, iov, 37);
+        bytes_written = sendto(
+                program_args->socket,
+                packet_buffer,
+                packet_length,
+                0, // flags
+                (struct sockaddr *)&dest_info,
+                sizeof(dest_info)
+        );
 
         if (bytes_written == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -95,6 +87,7 @@ static int send_loop(void *arg) {
                     );
                     break;
                 }
+                continue;
             }
             else {
                 logger(LOG_ERROR,
@@ -104,16 +97,15 @@ static int send_loop(void *arg) {
                 break;
             }
         }
-        else if (bytes_written < (ssize_t)(packet_length * 37)) {
+        else if (bytes_written < (ssize_t)(packet_length)) {
             logger(LOG_WARN,
-                   "Not all data was written; %ld bytes remain;\n"
-                   "try to lower the buffer size passed to writev().",
-                   (packet_length * 37) - bytes_written
+                   "Partial send detected (%ld bytes); this is unusual for UDP.",
+                   bytes_written
             );
         }
 
         ip_header->saddr.address = next_ip;
-        tcp_header->sport = next_port;
+        udp_header->sport = next_port;
     }
 
 #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
@@ -122,8 +114,6 @@ static int send_loop(void *arg) {
     return 0;
 #endif
 }
-
-
 #include <time.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -318,41 +308,127 @@ static int send_loop_tracert(void *arg) {
 #endif
 }
 
+//
+//static int send_loop_dpdk(void *arg) {
+//    const struct ProgramArgs *const program_args =
+//            (const struct ProgramArgs *const)arg;
+//
+//    _Alignas (_Alignof (max_align_t)) uint8_t
+//            packet_buffer[IP_PKT_MTU] = {0};
+//
+//    struct ip_hdr  *ip_header  =
+//            (struct ip_hdr *)packet_buffer;
+//    struct tcp_hdr *tcp_header =
+//            (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
+//
+//    *ip_header = *(program_args->ipv4);
+//    *tcp_header = (struct tcp_hdr){
+//            .sport = htons(rand() % 65536),
+//            .dport = htons(80),
+//            .seqnum = rand(),
+//            .flags.syn = true
+//    };
+//
+//    uint32_t ip_diff = 1;
+//    size_t packet_length = ntohs(ip_header->len);
+//
+//    const uint16_t port_id = 0;
+//
+//    for (int cnt = 1500; cnt >= 0; cnt--) {
+//        ip_header->saddr.address = htonl(
+//                program_args->ipv4->saddr.address
+//                + (rand() % ip_diff)
+//        );
+//        tcp_header->sport = htons(rand() % 65536);
+//
+//        if (cnt < 100 || dpdk_send_packet(port_id, packet_buffer, packet_length) != 0) {
+////             logger(LOG_WARN, "TEST TESTSETSETSETSETSETSETSETSETSET ------------");
+//        }
+//    }
+//
+//#if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+//    return thrd_success;
+//#else
+//    return 0;
+//#endif
+//}
+
+
+
+
+
+// In packet.c, replace send_loop_dpdk with this:
+
+// --- Make sure this header is included at the top of packet.c ---
+#include <rte_ether.h>
+// ---------------------------------------------------------------
+
 
 static int send_loop_dpdk(void *arg) {
     const struct ProgramArgs *const program_args =
             (const struct ProgramArgs *const)arg;
 
+    // --- !! IMPORTANT: SET THIS !! ---
+    // Find this with `ip neigh` or `arp -a` for your gateway/destination
+    const struct rte_ether_addr dest_mac = {
+            .addr_bytes = {0x00, 0x00, 0x5e, 0x00, 0x01, 0x01}
+    };
+    // ---------------------------------
+
     _Alignas (_Alignof (max_align_t)) uint8_t
             packet_buffer[IP_PKT_MTU] = {0};
 
+    // --- Packet headers now include Ethernet ---
+    struct rte_ether_hdr *eth_header =
+            (struct rte_ether_hdr *)packet_buffer;
     struct ip_hdr  *ip_header  =
-            (struct ip_hdr *)packet_buffer;
-    struct tcp_hdr *tcp_header =
-            (struct tcp_hdr *)(packet_buffer + sizeof (struct ip_hdr));
+            (struct ip_hdr *)(packet_buffer + sizeof(struct rte_ether_hdr));
+    struct udp_hdr *udp_header =
+            (struct udp_hdr *)(packet_buffer + sizeof(struct rte_ether_hdr)
+                               + sizeof(struct ip_hdr));
 
+    // --- 1. Build Ethernet Header ---
+    eth_header->ether_type = htons(RTE_ETHER_TYPE_IPV4);
+    eth_header->src_addr = program_args->port_mac; // From Step 2
+    eth_header->dst_addr = dest_mac;               // The hardcoded one
+
+    // --- 2. Build IP Header ---
     *ip_header = *(program_args->ipv4);
-    *tcp_header = (struct tcp_hdr){
-            .sport = htons(rand() % 65536),
-            .dport = htons(80),
-            .seqnum = rand(),
-            .flags.syn = true
+    ip_header->saddr.address = htonl(program_args->ipv4->saddr.address);
+    ip_header->daddr.address = htonl(program_args->ipv4->daddr.address);
+    ip_header->proto = IPPROTO_UDP;
+    // Set checksum to 0; HW offload will do it
+    ip_header->chksum = 0;
+
+    // --- 3. Build UDP Header ---
+    *udp_header = (struct udp_hdr){
+            .sport  = htons(rand() % 65536),
+            .dport  = htons(33434),
+            .len    = htons(sizeof(struct udp_hdr)),
+            // Set checksum to 0; HW offload will do it
+            .chksum = 0
     };
 
-    uint32_t ip_diff = 1;
-    size_t packet_length = ntohs(ip_header->len);
+    // --- 4. Set final packet length (L2 + L3 + L4) ---
+    size_t packet_length = sizeof(struct rte_ether_hdr)
+                           + sizeof(struct ip_hdr)
+                           + sizeof(struct udp_hdr);
+    ip_header->len = htons(packet_length - sizeof(struct rte_ether_hdr));
 
+
+    uint32_t ip_diff = 1;
     const uint16_t port_id = 0;
 
     for (;;) {
         ip_header->saddr.address = htonl(
-                program_args->ipv4->saddr.address
+                ntohl(program_args->ipv4->saddr.address)
                 + (rand() % ip_diff)
         );
-        tcp_header->sport = htons(rand() % 65536);
+        ip_header->ttl = 127;
+        udp_header->sport = htons(rand() % 65536);
 
         if (dpdk_send_packet(port_id, packet_buffer, packet_length) != 0) {
-            // logger(LOG_WARN, "Failed to send DPDK packet");
+            /* logger(LOG_WARN, "UDP send test..."); */
         }
     }
 
@@ -362,6 +438,7 @@ static int send_loop_dpdk(void *arg) {
     return 0;
 #endif
 }
+
 
 
 

@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <sys/types.h>
+#include <rte_ether.h>
 
 // It is better to contain everything within a single struct, as
 // opposed to having a bunch of global variables all over the place.
@@ -90,7 +92,8 @@ typedef struct ProgramArgs {
         uint8_t type;
         uint8_t code;
     } icmp_misc;
-    
+
+    struct rte_ether_addr port_mac;
 } program_args_t;
 
 

@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+
+#include <sys/types.h>
 // ---------------------------------------------------------------------
 // DPDK mode (optional compile-time enable)
 // ---------------------------------------------------------------------

@@ -18,6 +18,7 @@
 // along with this program; if not, see <https://www.gnu.org/licenses/>.
 // ---------------------------------------------------------------------
 
+#include <arpa/inet.h>
 
 #include "./program.h"
 #include "./cmdline/logger.h"
@@ -170,18 +171,65 @@ int main(int argc, char *argv[]) {
     int eal_args_consumed = 0;
     int socket_descriptor = -1;
 
-    if (dpdk_mode) {
-        logger(LOG_INFO, "Initializing DPDK environment...");
-        eal_args_consumed = setup_dpdk_environment(argc, argv);
-        argc--;
-        for (int i = eal_args_consumed + 1; i < argc; i++)
-            argv[i] = argv[i + 1];
+    char *program_name = argv[0];
 
-        if (eal_args_consumed >= 0) {
-            logger(LOG_INFO, "DPDK EAL initialized successfully.");
-            socket_descriptor = setup_dpdk_socket(0); // port 0 by default
-        } else {
+    if (dpdk_mode) {
+        eal_args_consumed = setup_dpdk_environment(argc, argv);
+
+        if (eal_args_consumed < 0) {
             logger(LOG_ERROR, "Failed to initialize DPDK EAL; see EAL errors above.");
+            program_args.diagnostics.unrecoverable_error = true;
+            goto CLEANUP;
+        }
+
+        int ret = rte_eth_macaddr_get(0, &program_args.port_mac); // 0 = port_id
+        if (ret != 0) {
+            logger(LOG_ERROR, "Failed to get MAC address for port 0: %s",
+                   strerror(-ret));
+            program_args.diagnostics.unrecoverable_error = true;
+            goto CLEANUP;
+        }
+        char mac_str[18];
+        rte_ether_format_addr(mac_str, sizeof(mac_str), &program_args.port_mac);
+        logger(LOG_INFO, "DPDK: Port 0 MAC is %s", mac_str);
+        logger(LOG_INFO, "Initializing DPDK environment...");
+
+        // Adjust argc and argv for our application's parser
+        int app_argc = argc - eal_args_consumed;
+        char **app_argv = &argv[eal_args_consumed];
+        app_argv[0] = program_name; // Put the program name back
+
+        // Use these new values for the rest of main()
+        argc = app_argc;
+        argv = app_argv;
+        // --- END OF CORRECTION ---
+
+        logger(LOG_INFO, "DPDK EAL initialized successfully.");
+        socket_descriptor = setup_dpdk_socket(0); // port 0 by default
+
+        logger(LOG_INFO, "Waiting for DPDK port 0 link to come up (up to 30s)...");
+        struct rte_eth_link link = {0}; // Initialize link status to 0
+        bool link_up = false;
+        for (int i = 0; i < 30; i++) { // Check for 30 seconds
+            ret = rte_eth_link_get_nowait(0, &link);
+            if (ret == 0 && link.link_status == RTE_ETH_LINK_UP) {
+                logger(LOG_INFO, "DPDK: Port 0 Link Up! Speed %u Mbps %s-duplex",
+                       (unsigned)link.link_speed,
+                       (link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX) ? "full" : "half");
+                link_up = true;
+                break; // Link is up, exit the loop
+            }
+            sleep(1); // Wait 1 second
+        }
+
+        if (!link_up) {
+            logger(LOG_ERROR, "DPDK: Port 0 link is still DOWN after 30s. Exiting.");
+            program_args.diagnostics.unrecoverable_error = true;
+            goto CLEANUP;
+        }
+
+        if (socket_descriptor < 0) { // setup_dpdk_socket returns < 0 on error
+            logger(LOG_ERROR, "Failed to setup DPDK socket; see errors above.");
             program_args.diagnostics.unrecoverable_error = true;
             goto CLEANUP;
         }
@@ -189,6 +237,7 @@ int main(int argc, char *argv[]) {
 
     diagnose_system(&program_args);
     fill_defaults(&program_args);
+    program_args.ipv4->saddr.address = ntohl(inet_addr("10.0.177.58"));
 
     if (parse_args(argc, argv, &program_args) != 0) {
         program_args.diagnostics.unrecoverable_error = true;

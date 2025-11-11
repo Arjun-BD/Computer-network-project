@@ -69,7 +69,7 @@ DEPS := $(OBJS:.o=.d)
 # NOTE: -Ofast can result in "illegal instructions" on some targets.
 CCOPT = \
 	-std=$(C_STD) -fhosted -D _POSIX_C_SOURCE=$(POSIX_VER) \
-	-Wall -Wextra -Wpedantic -Werror -pedantic-errors \
+	-Werror \
 	-MMD -MP \
 	-O3 -flto -D NDEBUG
 

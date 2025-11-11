@@ -6,6 +6,8 @@
 
 #include "socket.h"
 
+#include <rte_ether.h>
+#include "./netlib/netinet.h"
 
 #if defined(_POSIX_C_SOURCE)
 
@@ -235,11 +237,18 @@ int setup_dpdk_environment(int argc, char **argv) {
         logger(LOG_CRIT, "Failed to create mbuf pool");
         return -1;
     }
-    return 0;
+    return ret;
 }
 
 int setup_dpdk_socket(uint16_t port_id) {
-    struct rte_eth_conf port_conf = {0};
+    struct rte_eth_conf port_conf = {
+            .txmode = {
+                    .offloads =
+                    RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+                    RTE_ETH_TX_OFFLOAD_UDP_CKSUM,
+            },
+    };
+
     const uint16_t nb_rxd = 128;
     const uint16_t nb_txd = 512;
 
@@ -258,22 +267,140 @@ int setup_dpdk_socket(uint16_t port_id) {
         return ret;
     }
 
+    rte_eth_dev_set_link_up(port_id);
     logger(LOG_INFO, "DPDK: Port %u started", port_id);
     return ret;
 }
 
+//int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len) {
+//    struct rte_mbuf *m = rte_pktmbuf_alloc(mbuf_pool);
+//    if (!m) return -1;
+//
+//    void *dst = rte_pktmbuf_append(m, len);
+//    memcpy(dst, pkt_data, len);
+//
+//    uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &m, 1);
+//    if (nb_tx == 0) {
+//        rte_pktmbuf_free(m);
+//        logger(LOG_INFO, "DPDK: Packet Sending Failed");
+//        return -1;
+//    }
+//    return 0;
+//}
+
+#include <inttypes.h>
+#include <rte_ethdev.h>
+#include <rte_mbuf.h>
+
+
+void dump_port_and_mbuf_info(uint16_t port_id, struct rte_mempool *mp) {
+    struct rte_eth_link link;
+    int ret;
+
+    ret = rte_eth_link_get_nowait(port_id, &link);
+    if (ret == 0) {
+        logger(LOG_INFO,
+               "DPDK: port=%u link_up=%d speed=%u duplex=%u",
+               port_id, link.link_status, link.link_speed, link.link_duplex);
+    } else {
+        logger(LOG_WARN,
+               "DPDK: port=%u rte_eth_link_get_nowait failed (ret=%d)",
+               port_id, ret);
+    }
+
+    struct rte_eth_dev_info dev_info;
+    ret = rte_eth_dev_info_get(port_id, &dev_info);
+    if (ret == 0) {
+        logger(LOG_INFO,
+               "DPDK: dev_info: max_tx_queues=%u max_rx_queues=%u tx_offload_capa=0x%" PRIx64,
+                dev_info.max_tx_queues,
+                dev_info.max_rx_queues,
+                dev_info.tx_offload_capa);
+    } else {
+        logger(LOG_WARN,
+               "DPDK: port=%u rte_eth_dev_info_get failed (ret=%d)",
+               port_id, ret);
+    }
+
+    struct rte_eth_stats stats;
+    ret = rte_eth_stats_get(port_id, &stats);
+    if (ret == 0) {
+        logger(LOG_INFO,
+               "DPDK: stats: ipackets=%" PRIu64 " opackets=%" PRIu64
+        " ibytes=%" PRIu64 " obytes=%" PRIu64
+        " imissed=%" PRIu64 " oerrors=%" PRIu64,
+                stats.ipackets, stats.opackets,
+                stats.ibytes, stats.obytes,
+                stats.imissed, stats.oerrors);
+    } else {
+        logger(LOG_WARN,
+               "DPDK: port=%u rte_eth_stats_get failed (ret=%d)",
+               port_id, ret);
+    }
+
+    if (mp) {
+        unsigned int data_room = rte_pktmbuf_data_room_size(mp);
+        logger(LOG_INFO,
+               "DPDK: mempool name=%s size=%u eltsz=%u cache=%u data_room=%u headroom=%u tailroom=%u",
+               mp->name,
+               (unsigned)mp->size,
+               (unsigned)mp->elt_size,
+               (unsigned)mp->cache_size,
+               data_room,
+               RTE_PKTMBUF_HEADROOM,
+               data_room - RTE_PKTMBUF_HEADROOM);
+    } else {
+        logger(LOG_WARN, "DPDK: mempool pointer is NULL");
+    }
+}
+
+static int ctr_Fail = 0;
+static int ctr_sent = 0;
+
 int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len) {
     struct rte_mbuf *m = rte_pktmbuf_alloc(mbuf_pool);
-    if (!m) return -1;
-
-    void *dst = rte_pktmbuf_append(m, len);
-    memcpy(dst, pkt_data, len);
-
-    uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &m, 1);
-    if (nb_tx == 0) {
-        rte_pktmbuf_free(m);
+    dump_port_and_mbuf_info(port_id, mbuf_pool);
+    if (m == NULL) {
+        logger(LOG_ERROR, "DPDK: mbuf alloc failed");
         return -1;
     }
+
+    void *dst = rte_pktmbuf_append(m, len);
+    if (dst == NULL) {
+        // Not enough tailroom in single mbuf
+        rte_pktmbuf_free(m);
+        logger(LOG_ERROR, "DPDK: not enough tailroom for len=%zu", len);
+        return -1;
+    }
+
+    memcpy(dst, pkt_data, len);
+
+    m->l2_len = sizeof(struct rte_ether_hdr);
+    m->l3_len = sizeof(struct ip_hdr);
+    m->ol_flags = RTE_MBUF_F_TX_IPV4 |
+                  RTE_MBUF_F_TX_IP_CKSUM |
+                  RTE_MBUF_F_TX_UDP_CKSUM;
+
+    struct rte_mbuf *bufs[1] = { m };
+
+    // try to transmit once, optionally retry a few times (simple retry loop)
+    uint16_t sent = rte_eth_tx_burst(port_id, 0, bufs, 1);
+//    dump_port_and_mbuf_info(port_id, mbuf_pool);
+    if (sent == 0) {
+        // burst failed; free the mbuf
+        rte_pktmbuf_free(m);
+        logger(LOG_INFO, "DPDK: Packet Sending Failed (nb_tx=0) %d", ctr_Fail);
+        ctr_Fail++;
+        return -1;
+    }
+    else{
+//        logger(LOG_INFO, "DPDK: Packet Sent");
+        ctr_sent++;
+    }
+
+    logger(LOG_INFO, "Failed: %d , Sent: %d",ctr_Fail,ctr_sent);
+
+    // success (note: if you send more than one you must handle partial sends)
     return 0;
 }
 
