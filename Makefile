@@ -166,6 +166,7 @@ endif
 
 CCOPT += $(DPDK_CFLAGS)
 LDOPT += $(DPDK_LIBS)
+LDOPT += -lm
 
 #
 # Make Targets

@@ -237,7 +237,11 @@ int main(int argc, char *argv[]) {
 
     diagnose_system(&program_args);
     fill_defaults(&program_args);
-    program_args.ipv4->saddr.address = ntohl(inet_addr("10.0.177.58"));
+    if(dpdk_mode){
+
+        program_args.ipv4->saddr.address = ntohl(inet_addr("10.0.177.58"));
+        logger(LOG_WARN, "Source IP Address is: 10.0.177.58");
+    }
 
     if (parse_args(argc, argv, &program_args) != 0) {
         program_args.diagnostics.unrecoverable_error = true;
@@ -270,7 +274,7 @@ int main(int argc, char *argv[]) {
     send_packets(&program_args);
 
     if (shutdown(socket_descriptor, SHUT_RDWR) == -1) {
-        logger(LOG_WARN, "Socket shutdown failed: %s", strerror(errno));
+//        logger(LOG_WARN, "Socket shutdown failed: %s", strerror(errno));
     }
     else {
         logger(LOG_INFO, "Socket shutdown successfully.");

@@ -356,10 +356,11 @@ void dump_port_and_mbuf_info(uint16_t port_id, struct rte_mempool *mp) {
 
 static int ctr_Fail = 0;
 static int ctr_sent = 0;
+static double total_send_time_us = 0.0;
 
 int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len) {
     struct rte_mbuf *m = rte_pktmbuf_alloc(mbuf_pool);
-    dump_port_and_mbuf_info(port_id, mbuf_pool);
+//    dump_port_and_mbuf_info(port_id, mbuf_pool);
     if (m == NULL) {
         logger(LOG_ERROR, "DPDK: mbuf alloc failed");
         return -1;
@@ -384,21 +385,32 @@ int dpdk_send_packet(uint16_t port_id, const void *pkt_data, size_t len) {
     struct rte_mbuf *bufs[1] = { m };
 
     // try to transmit once, optionally retry a few times (simple retry loop)
+    uint64_t start_tsc = rte_get_tsc_cycles();
     uint16_t sent = rte_eth_tx_burst(port_id, 0, bufs, 1);
 //    dump_port_and_mbuf_info(port_id, mbuf_pool);
+
+    uint64_t end_tsc = rte_get_tsc_cycles();
+    double elapsed_us = ((end_tsc - start_tsc) * 1e6) / rte_get_tsc_hz();
+
+    total_send_time_us += elapsed_us;
     if (sent == 0) {
         // burst failed; free the mbuf
         rte_pktmbuf_free(m);
-        logger(LOG_INFO, "DPDK: Packet Sending Failed (nb_tx=0) %d", ctr_Fail);
+//        logger(LOG_INFO, "DPDK: Packet Sending Failed (nb_tx=0) %d", ctr_Fail);
         ctr_Fail++;
         return -1;
     }
     else{
 //        logger(LOG_INFO, "DPDK: Packet Sent");
         ctr_sent++;
+        if (ctr_sent % 10 == 0) {
+            double avg_us = total_send_time_us / 10.0;
+//            logger(LOG_INFO, "DPDK: avg send time per packet = %.2f µs (last 100 pkts)", avg_us);
+            total_send_time_us = 0.0;
+        }
     }
 
-    logger(LOG_INFO, "Failed: %d , Sent: %d",ctr_Fail,ctr_sent);
+//    logger(LOG_INFO, "Failed: %d , Sent: %d",ctr_Fail,ctr_sent);
 
     // success (note: if you send more than one you must handle partial sends)
     return 0;
