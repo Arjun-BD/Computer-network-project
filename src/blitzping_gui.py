@@ -49,18 +49,24 @@ class BlitzpingGUI(tk.Tk):
         self.sudo_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(top, text='Run with sudo (or run GUI with sudo)', variable=self.sudo_var).grid(row=0, column=3, padx=6)
 
-        # Dest and threads
         ttk.Label(top, text='Destination IP:').grid(row=1, column=0, sticky='w', pady=(8,0))
         self.dest_var = tk.StringVar(value='8.8.8.8')
-        ttk.Entry(top, textvariable=self.dest_var, width=20).grid(row=1, column=1, sticky='w', pady=(8,0))
+        ttk.Entry(top, textvariable=self.dest_var, width=18).grid(row=1, column=1, sticky='w', pady=(8,0))
 
-        ttk.Label(top, text='Num threads:').grid(row=1, column=2, sticky='w', pady=(8,0))
+        ttk.Label(top, text='Num threads:').grid(row=1, column=2, sticky='w', pady=(8,0), padx=(8,0))
         self.threads_var = tk.StringVar(value='1')
         ttk.Entry(top, textvariable=self.threads_var, width=8).grid(row=1, column=3, sticky='w', pady=(8,0))
 
-        # Traceroute
+        ttk.Label(top, text='Source IP:').grid(row=1, column=4, sticky='w', padx=(12,0))
+        self.src_ip_var = tk.StringVar(value='')
+        ttk.Entry(top, textvariable=self.src_ip_var, width=14).grid(row=1, column=5, sticky='w')
+
+        ttk.Label(top, text='Gate MAC:').grid(row=1, column=6, sticky='w', padx=(12,0))
+        self.gatemac_var = tk.StringVar(value='')
+        ttk.Entry(top, textvariable=self.gatemac_var, width=18).grid(row=1, column=7, sticky='w')
+
         self.tracert_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(top, text='Traceroute (--tracert)', variable=self.tracert_var).grid(row=1, column=4, padx=6)
+        ttk.Checkbutton(top, text='Traceroute (--tracert)', variable=self.tracert_var).grid(row=1, column=8, padx=6)
 
         # DPDK options
         dpdk_frame = ttk.Labelframe(frm, text='DPDK options', padding=8)
@@ -155,6 +161,8 @@ class BlitzpingGUI(tk.Tk):
 
         dest = self.dest_var.get().strip()
         threads = self.threads_var.get().strip()
+        src_ip = self.src_ip_var.get().strip()
+        gatemac = self.gatemac_var.get().strip()
 
         # If using DPDK, EAL options (-l, -a, and other EAL flags) must appear BEFORE app args.
         if self.use_dpdk_var.get():
@@ -180,6 +188,10 @@ class BlitzpingGUI(tk.Tk):
                 cmd.append(f'--dest-ip={dest}')
             if threads:
                 cmd.append(f'--num-threads={threads}')
+            if src_ip:
+                cmd.append(f'--src-ip={src_ip}')
+            if gatemac:
+                cmd.append(f'--gate-mac={gatemac}')
 
         else:
             # Non-DPDK flow: pass application args directly
@@ -187,6 +199,10 @@ class BlitzpingGUI(tk.Tk):
                 cmd.append(f'--dest-ip={dest}')
             if threads:
                 cmd.append(f'--num-threads={threads}')
+            if src_ip:
+                cmd.append(f'--src-ip={src_ip}')
+            if gatemac:
+                cmd.append(f'--gate-mac={gatemac}')
 
         # Traceroute
         if self.tracert_var.get():

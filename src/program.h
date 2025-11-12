@@ -94,7 +94,7 @@ typedef struct ProgramArgs {
     } icmp_misc;
 
     struct rte_ether_addr port_mac;
-    struct rte_ether_addr dest_mac;
+    struct rte_ether_addr gate_mac;
 } program_args_t;
 
 

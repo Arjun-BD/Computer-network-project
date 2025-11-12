@@ -237,11 +237,6 @@ int main(int argc, char *argv[]) {
 
     diagnose_system(&program_args);
     fill_defaults(&program_args);
-    if(dpdk_mode){
-
-        program_args.ipv4->saddr.address = ntohl(inet_addr("10.0.177.58"));
-        logger(LOG_WARN, "Source IP Address is: 10.0.177.58");
-    }
 
     if (parse_args(argc, argv, &program_args) != 0) {
         program_args.diagnostics.unrecoverable_error = true;

@@ -44,18 +44,28 @@ static char *to_uppercase(const char *str) {
 }
 */
 
+static int parse_mac_address(const char *mac_str, struct rte_ether_addr *addr) {
+    if (sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+               &addr->addr_bytes[0], &addr->addr_bytes[1],
+               &addr->addr_bytes[2], &addr->addr_bytes[3],
+               &addr->addr_bytes[4], &addr->addr_bytes[5]) != RTE_ETHER_ADDR_LEN) {
+        return -1;
+    }
+    return 0;
+}
+
 struct NameKey {
     const char *const name;
     const int key;
 };
 
 static long get_key_from_name(
-    const struct NameKey *const name_keys,
-    const size_t num_keys,
-    const char *const value_str,
-    const bool case_insensitive,
-    const char *const error_name,
-    bool *const error_occured
+        const struct NameKey *const name_keys,
+        const size_t num_keys,
+        const char *const value_str,
+        const bool case_insensitive,
+        const char *const error_name,
+        bool *const error_occured
 ) {
     char *comparison_value = NULL;
     if (case_insensitive) {
@@ -110,25 +120,25 @@ static long get_key_from_name(
         }
     }
     logger(LOG_ERROR,
-        "\"%s\" is not a valid textual entry for the \"--%s\" option;\n"
-        "valid entries are as follows (%s):\n  %s.\n"
-        "(Use \"--help=%s\" for a description on those.)",
-        value_str, error_name,
-        case_insensitive ? "case-insensitive" : "case-sensitive",
-        valid_options, error_name
+           "\"%s\" is not a valid textual entry for the \"--%s\" option;\n"
+           "valid entries are as follows (%s):\n  %s.\n"
+           "(Use \"--help=%s\" for a description on those.)",
+           value_str, error_name,
+           case_insensitive ? "case-insensitive" : "case-sensitive",
+           valid_options, error_name
     );
     free(valid_options);
-    
+
     *error_occured = true;
     return -1;
 }
 
 static long validate_range(
-    const char *const value_str,
-    const long min,
-    const long max,
-    const char *const error_name,
-    bool *const error_occured
+        const char *const value_str,
+        const long min,
+        const long max,
+        const char *const error_name,
+        bool *const error_occured
 ) {
     errno = 0;
 
@@ -139,13 +149,13 @@ static long validate_range(
     if (errno != 0 || *endptr != '\0' || result < min || result > max) {
         if (errno != 0) {
             logger(LOG_ERROR,
-                "Error in strtol() conversion: %s", strerror(errno)
+                   "Error in strtol() conversion: %s", strerror(errno)
             );
         }
 
         logger(LOG_ERROR,
-            "Value of \"--%s\" must be [%ld, %ld].",
-            error_name, min, max
+               "Value of \"--%s\" must be [%ld, %ld].",
+               error_name, min, max
         );
 
         *error_occured = true;
@@ -156,27 +166,27 @@ static long validate_range(
 }
 
 static long parse_text_or_int(
-    const struct NameKey *const name_keys,
-    const size_t num_keys,
-    const char *const value_str,
-    const bool case_insensitive,
-    const long min,
-    const long max,
-    const char *const error_name,
-    bool *const error_occured
+        const struct NameKey *const name_keys,
+        const size_t num_keys,
+        const char *const value_str,
+        const bool case_insensitive,
+        const long min,
+        const long max,
+        const char *const error_name,
+        bool *const error_occured
 ) {
     long result;
 
     if (isdigit(*value_str)) {
         result = validate_range(
-            value_str, min, max, error_name, error_occured
+                value_str, min, max, error_name, error_occured
         );
     }
     else {
         result = get_key_from_name(
                 name_keys, num_keys, value_str, case_insensitive,
                 error_name, error_occured
-            );
+        );
     }
 
     return result;
@@ -184,55 +194,55 @@ static long parse_text_or_int(
 
 
 static const struct NameKey IP_PROTOCOLS[] = {
-    {"ip", IP_PROTO_IP},
-    {"icmp", IP_PROTO_ICMP},
-    {"tcp", IP_PROTO_TCP},
-    {"udp", IP_PROTO_UDP}
+        {"ip", IP_PROTO_IP},
+        {"icmp", IP_PROTO_ICMP},
+        {"tcp", IP_PROTO_TCP},
+        {"udp", IP_PROTO_UDP}
 };
 
 static const struct NameKey IP_TOS_PREC_CODES[] = {
-    {"routine", IP_TOS_PREC_ROUTINE},
-    {"priority", IP_TOS_PREC_PRIORITY},
-    {"immediate", IP_TOS_PREC_IMMEDIATE},
-    {"flash", IP_TOS_PREC_FLASH},
-    {"override", IP_TOS_PREC_FLASH_OVERRIDE},
-    {"critical", IP_TOS_PREC_CRITIC_ECP},
-    {"internetwork", IP_TOS_PREC_INTERNETWORK_CONTROL},
-    {"network", IP_TOS_PREC_NETWORK_CONTROL}
+        {"routine", IP_TOS_PREC_ROUTINE},
+        {"priority", IP_TOS_PREC_PRIORITY},
+        {"immediate", IP_TOS_PREC_IMMEDIATE},
+        {"flash", IP_TOS_PREC_FLASH},
+        {"override", IP_TOS_PREC_FLASH_OVERRIDE},
+        {"critical", IP_TOS_PREC_CRITIC_ECP},
+        {"internetwork", IP_TOS_PREC_INTERNETWORK_CONTROL},
+        {"network", IP_TOS_PREC_NETWORK_CONTROL}
 };
 
 static const struct NameKey IP_ECN_CODES[] = {
-    {"not", IP_ECN_NOT_ECT},
-    {"ect1", IP_ECN_ECT_1},
-    {"ect0", IP_ECN_ECT_0},
-    {"ce", IP_ECN_CE}
+        {"not", IP_ECN_NOT_ECT},
+        {"ect1", IP_ECN_ECT_1},
+        {"ect0", IP_ECN_ECT_0},
+        {"ce", IP_ECN_CE}
 };
 
 static const struct NameKey IP_DSCP_CODES[] = {
-    {"df", IP_DSCP_DF},
-    {"cs0", IP_DSCP_CS0},
-    {"cs1", IP_DSCP_CS1},
-    {"cs2", IP_DSCP_CS2},
-    {"cs3", IP_DSCP_CS3},
-    {"cs4", IP_DSCP_CS4},
-    {"cs5", IP_DSCP_CS5},
-    {"cs6", IP_DSCP_CS6},
-    {"cs7", IP_DSCP_CS7},
-    {"af11", IP_DSCP_AF11},
-    {"af12", IP_DSCP_AF12},
-    {"af13", IP_DSCP_AF13},
-    {"af21", IP_DSCP_AF21},
-    {"af22", IP_DSCP_AF22},
-    {"af23", IP_DSCP_AF23},
-    {"af31", IP_DSCP_AF31},
-    {"af32", IP_DSCP_AF32},
-    {"af33", IP_DSCP_AF33},
-    {"af41", IP_DSCP_AF41},
-    {"af42", IP_DSCP_AF42},
-    {"af43", IP_DSCP_AF43},
-    {"ef", IP_DSCP_EF},
-    {"va", IP_DSCP_VA},
-    {"le", IP_DSCP_LE}
+        {"df", IP_DSCP_DF},
+        {"cs0", IP_DSCP_CS0},
+        {"cs1", IP_DSCP_CS1},
+        {"cs2", IP_DSCP_CS2},
+        {"cs3", IP_DSCP_CS3},
+        {"cs4", IP_DSCP_CS4},
+        {"cs5", IP_DSCP_CS5},
+        {"cs6", IP_DSCP_CS6},
+        {"cs7", IP_DSCP_CS7},
+        {"af11", IP_DSCP_AF11},
+        {"af12", IP_DSCP_AF12},
+        {"af13", IP_DSCP_AF13},
+        {"af21", IP_DSCP_AF21},
+        {"af22", IP_DSCP_AF22},
+        {"af23", IP_DSCP_AF23},
+        {"af31", IP_DSCP_AF31},
+        {"af32", IP_DSCP_AF32},
+        {"af33", IP_DSCP_AF33},
+        {"af41", IP_DSCP_AF41},
+        {"af42", IP_DSCP_AF42},
+        {"af43", IP_DSCP_AF43},
+        {"ef", IP_DSCP_EF},
+        {"va", IP_DSCP_VA},
+        {"le", IP_DSCP_LE}
 };
 
 
@@ -241,39 +251,39 @@ static const struct NameKey IP_DSCP_CODES[] = {
 // TODO: add runtime reports?
 // https://github.com/cpredef/predef
 static const char HELP_DIAGNOSTICS[] =
-"Compilation Diagnostics:\n"
-#if defined(__DATE__) && defined(__TIME__)
-"  Build Time           : " __DATE__ " @ " __TIME__ "\n"
-#else
-"  Build Time           : unknown\n"
-#endif
+        "Compilation Diagnostics:\n"
+        #if defined(__DATE__) && defined(__TIME__)
+        "  Build Time           : " __DATE__ " @ " __TIME__ "\n"
+        #else
+        "  Build Time           : unknown\n"
+        #endif
 
-#if defined(__VERSION__)
-"  Compiler             : " __VERSION__ "\n"
-#else
-"  Compiler             : unknown\n"
-#endif
+        #if defined(__VERSION__)
+        "  Compiler             : " __VERSION__ "\n"
+        #else
+        "  Compiler             : unknown\n"
+        #endif
 
-// NOTE: These are defined in the makefile.
-#if defined(TARGET_TRIPLET) && defined(TARGET_ARCH) \
+        // NOTE: These are defined in the makefile.
+        #if defined(TARGET_TRIPLET) && defined(TARGET_ARCH) \
     && defined(TARGET_SUBARCH) && defined(TARGET_VENDOR) \
     && defined(TARGET_OS) && defined(TARGET_LIBC) \
     && defined(TARGET_FLOAT_ABI)
-"  Target Triplet       : " TARGET_TRIPLET "\n"
+        "  Target Triplet       : " TARGET_TRIPLET "\n"
 "    Architecture       : " TARGET_ARCH "\n"
 "      Sub-Architecture : " TARGET_SUBARCH "\n"
 "    Vendor             : " TARGET_VENDOR "\n"
 "    Operating System   : " TARGET_OS "\n"
 "    C Library (libc)   : " TARGET_LIBC "\n"
 "    Float ABI          : " TARGET_FLOAT_ABI "\n"
-#endif
+        #endif
 
-#if defined(__LITTLE_ENDIAN__)
-"    Endianness         : little\n"
-#elif defined(__BIG_ENDIAN__)
-"    Endianness         : big\n"
-#else
-"    Endianness         : unknown\n";
+        #if defined(__LITTLE_ENDIAN__)
+        "    Endianness         : little\n"
+        #elif defined(__BIG_ENDIAN__)
+        "    Endianness         : big\n"
+        #else
+        "    Endianness         : unknown\n";
 #endif
 
 #if defined(__STDC_VERSION__)
@@ -325,6 +335,7 @@ enum OptionKind {
     OPTION_IPV4,
     OPTION_SRC_IP,
     OPTION_DEST_IP,
+    OPTION_GATE_MAC,
     OPTION_IP_VER,
     OPTION_IP_IHL,
     OPTION_IP_TOS,
@@ -369,90 +380,91 @@ struct Option {
 };
 
 static const struct Option OPTIONS[] = {
-    {'\0', "\0", false, OPTION_NONE},
-    // General
-    {'?', "help", false, OPTION_HELP},
-    {'!', "about", false, OPTION_ABOUT},
-    {'V', "version", false, OPTION_VERSION},
-    {'Q', "quiet", false, OPTION_QUIET},
-    // Advanced
-    {'$', "bypass-checks", false, OPTION_BYPASS_CHECKS},
-    {'\0', "logger-level", true, OPTION_LOGGER_LEVEL},
-    {'\0', "no-log-timestamp", false, OPTION_NO_LOG_TIMESTAMP},
-    {'#', "num-threads", true, OPTION_NUM_THREADS},
-    {'\0', "native-threads", false, OPTION_NATIVE_THREADS},
-    {'\0', "buffer-size", true, OPTION_BUFFER_SIZE},
-    {'\0', "no-async-sock", false, OPTION_NO_ASYNC_SOCK},
-    {'\0', "no-mem-lock", false, OPTION_NO_MEM_LOCK},
-    {'\0', "no-cpu-prefetch", false, OPTION_NO_CPU_PREFETCH},
-    // Multi-options (switches that may refer to multiple headers
-    // and need extra processing to determine which one).
-    {'\0', "src-ip", true, OPTION_SRC_IP},
-    {'\0', "dest-ip", true, OPTION_DEST_IP},
-    {'\0', "flags", true, OPTION_IP_FLAGS},
-    {'\0', "chksum", true, OPTION_IP_CHECKSUM},
-    {'\0', "options", true, OPTION_IP_OPTIONS},
-    // IPv4 Header
-    {'4', "ipv4", false, OPTION_IPV4},
-    /* src-ip */
-    /* dest-ip */
-    {'\0', "ver", true, OPTION_IP_VER},
-    {'\0', "ihl", true, OPTION_IP_IHL},
-    {'\0', "tos", true, OPTION_IP_TOS},
-    {'\0', "prec", true, OPTION_IP_PREC},
-    {'\0', "min-delay", false, OPTION_IP_MIN_DELAY},
-    {'\0', "max-tput", false, OPTION_IP_MAX_TPUT},
-    {'\0', "max-rely", false, OPTION_IP_MAX_RELY},
-    {'\0', "min-cost", false, OPTION_IP_MIN_COST},
-    {'\0', "mbz-one", false, OPTION_IP_MBZ_ONE},
-    {'\0', "dscp", true, OPTION_IP_DSCP},
-    {'\0', "ecn", true, OPTION_IP_ECN},
-    {'\0', "len", true, OPTION_IP_LEN},
-    {'\0', "ident", true, OPTION_IP_IDENT},
-    /* flags */
-    {'\0', "evil-bit", false, OPTION_IP_EVIL_BIT},
-    {'\0', "dont-frag", false, OPTION_IP_DONT_FRAG},
-    {'\0', "more-frag", false, OPTION_IP_MORE_FRAG},
-    {'\0', "frag-ofs", true, OPTION_IP_FRAG_OFS},
-    {'\0', "ttl", true, OPTION_IP_TTL},
-    {'\0', "proto", true, OPTION_IP_PROTO},
-    /* chksum */
-    /* options */
-    // IPv6 Header
-    {'6', "ipv6", false, OPTION_IPV6},
-    /* src-ip */
-    /* dest-ip */
-    {'\0', "next-header", true, OPTION_IP6_NEXT_HEADER},
-    {'\0', "hop-limit", true, OPTION_IP6_HOP_LIMIT},
-    {'\0', "flow-label", true, OPTION_IP6_FLOW_LABEL},
-    // unfinished
-    // TCP Header
-    {'T', "tcp", false, OPTION_TCP},
-    /* src-port */
-    /* dest-port */
-    {'\0', "seq-num", true, OPTION_NONE},
-    {'\0', "ack-num", true, OPTION_NONE},
-    {'\0', "data-ofs", true, OPTION_NONE},
-    {'\0', "reserved", true, OPTION_NONE},
-    /* flags */
-    {'\0', "cwr", false, OPTION_NONE},
-    {'\0', "ece", false, OPTION_NONE},
-    {'\0', "urg", false, OPTION_NONE},
-    {'\0', "ack", false, OPTION_NONE},
-    {'\0', "psh", false, OPTION_NONE},
-    {'\0', "rst", false, OPTION_NONE},
-    {'\0', "syn", false, OPTION_NONE},
-    {'\0', "fin", false, OPTION_NONE},
-    {'\0', "tracert", false, OPTION_TRACERT},
-    {'\0', "use-dpdk", false, OPTION_USE_DPDK},
-    {'\0', "window", true, OPTION_NONE},
-    /* chksum */
-    {'\0', "urg-ptr", true, OPTION_NONE},
-    /* options */
-    // UDP Header
-    {'U', "udp", false, OPTION_UDP},
-    // ICMP Header
-    {'I', "icmp", false, OPTION_ICMP},
+        {'\0', "\0", false, OPTION_NONE},
+        // General
+        {'?', "help", false, OPTION_HELP},
+        {'!', "about", false, OPTION_ABOUT},
+        {'V', "version", false, OPTION_VERSION},
+        {'Q', "quiet", false, OPTION_QUIET},
+        // Advanced
+        {'$', "bypass-checks", false, OPTION_BYPASS_CHECKS},
+        {'\0', "logger-level", true, OPTION_LOGGER_LEVEL},
+        {'\0', "no-log-timestamp", false, OPTION_NO_LOG_TIMESTAMP},
+        {'#', "num-threads", true, OPTION_NUM_THREADS},
+        {'\0', "native-threads", false, OPTION_NATIVE_THREADS},
+        {'\0', "buffer-size", true, OPTION_BUFFER_SIZE},
+        {'\0', "no-async-sock", false, OPTION_NO_ASYNC_SOCK},
+        {'\0', "no-mem-lock", false, OPTION_NO_MEM_LOCK},
+        {'\0', "no-cpu-prefetch", false, OPTION_NO_CPU_PREFETCH},
+        // Multi-options (switches that may refer to multiple headers
+        // and need extra processing to determine which one).
+        {'\0', "src-ip", true, OPTION_SRC_IP},
+        {'\0', "dest-ip", true, OPTION_DEST_IP},
+        {'\0', "gate-mac", true, OPTION_GATE_MAC},
+        {'\0', "flags", true, OPTION_IP_FLAGS},
+        {'\0', "chksum", true, OPTION_IP_CHECKSUM},
+        {'\0', "options", true, OPTION_IP_OPTIONS},
+        // IPv4 Header
+        {'4', "ipv4", false, OPTION_IPV4},
+        /* src-ip */
+        /* dest-ip */
+        {'\0', "ver", true, OPTION_IP_VER},
+        {'\0', "ihl", true, OPTION_IP_IHL},
+        {'\0', "tos", true, OPTION_IP_TOS},
+        {'\0', "prec", true, OPTION_IP_PREC},
+        {'\0', "min-delay", false, OPTION_IP_MIN_DELAY},
+        {'\0', "max-tput", false, OPTION_IP_MAX_TPUT},
+        {'\0', "max-rely", false, OPTION_IP_MAX_RELY},
+        {'\0', "min-cost", false, OPTION_IP_MIN_COST},
+        {'\0', "mbz-one", false, OPTION_IP_MBZ_ONE},
+        {'\0', "dscp", true, OPTION_IP_DSCP},
+        {'\0', "ecn", true, OPTION_IP_ECN},
+        {'\0', "len", true, OPTION_IP_LEN},
+        {'\0', "ident", true, OPTION_IP_IDENT},
+        /* flags */
+        {'\0', "evil-bit", false, OPTION_IP_EVIL_BIT},
+        {'\0', "dont-frag", false, OPTION_IP_DONT_FRAG},
+        {'\0', "more-frag", false, OPTION_IP_MORE_FRAG},
+        {'\0', "frag-ofs", true, OPTION_IP_FRAG_OFS},
+        {'\0', "ttl", true, OPTION_IP_TTL},
+        {'\0', "proto", true, OPTION_IP_PROTO},
+        /* chksum */
+        /* options */
+        // IPv6 Header
+        {'6', "ipv6", false, OPTION_IPV6},
+        /* src-ip */
+        /* dest-ip */
+        {'\0', "next-header", true, OPTION_IP6_NEXT_HEADER},
+        {'\0', "hop-limit", true, OPTION_IP6_HOP_LIMIT},
+        {'\0', "flow-label", true, OPTION_IP6_FLOW_LABEL},
+        // unfinished
+        // TCP Header
+        {'T', "tcp", false, OPTION_TCP},
+        /* src-port */
+        /* dest-port */
+        {'\0', "seq-num", true, OPTION_NONE},
+        {'\0', "ack-num", true, OPTION_NONE},
+        {'\0', "data-ofs", true, OPTION_NONE},
+        {'\0', "reserved", true, OPTION_NONE},
+        /* flags */
+        {'\0', "cwr", false, OPTION_NONE},
+        {'\0', "ece", false, OPTION_NONE},
+        {'\0', "urg", false, OPTION_NONE},
+        {'\0', "ack", false, OPTION_NONE},
+        {'\0', "psh", false, OPTION_NONE},
+        {'\0', "rst", false, OPTION_NONE},
+        {'\0', "syn", false, OPTION_NONE},
+        {'\0', "fin", false, OPTION_NONE},
+        {'\0', "tracert", false, OPTION_TRACERT},
+        {'\0', "use-dpdk", false, OPTION_USE_DPDK},
+        {'\0', "window", true, OPTION_NONE},
+        /* chksum */
+        {'\0', "urg-ptr", true, OPTION_NONE},
+        /* options */
+        // UDP Header
+        {'U', "udp", false, OPTION_UDP},
+        // ICMP Header
+        {'I', "icmp", false, OPTION_ICMP},
 };
 
 
@@ -462,60 +474,60 @@ struct LayerAlias {
 };
 
 static const struct LayerAlias LAYER_ALIASES[] = {
-    // OSI (Open Systems Interconnection)
-    {"layer1", LAYER_PHYSICAL},
-    {"l1", LAYER_PHYSICAL},
-    {"physical", LAYER_PHYSICAL}, 
-    {"phys", LAYER_PHYSICAL},
-    // PDU (Protocol Data Unit)
-    {"symbol", LAYER_PHYSICAL},
-    {"bits", LAYER_PHYSICAL},
+        // OSI (Open Systems Interconnection)
+        {"layer1", LAYER_PHYSICAL},
+        {"l1", LAYER_PHYSICAL},
+        {"physical", LAYER_PHYSICAL},
+        {"phys", LAYER_PHYSICAL},
+        // PDU (Protocol Data Unit)
+        {"symbol", LAYER_PHYSICAL},
+        {"bits", LAYER_PHYSICAL},
 
-    // OSI
-    {"layer2", LAYER_DATALINK},
-    {"l2", LAYER_DATALINK},
-    {"datalink", LAYER_DATALINK},
-    {"data", LAYER_DATALINK}, 
-    {"frame", LAYER_DATALINK},
-    {"layer3", LAYER_NETWORK},
-    {"l3", LAYER_NETWORK}, 
-    {"network", LAYER_NETWORK},
-    {"net", LAYER_NETWORK},
-    // PDU
-    {"packet", LAYER_NETWORK},
+        // OSI
+        {"layer2", LAYER_DATALINK},
+        {"l2", LAYER_DATALINK},
+        {"datalink", LAYER_DATALINK},
+        {"data", LAYER_DATALINK},
+        {"frame", LAYER_DATALINK},
+        {"layer3", LAYER_NETWORK},
+        {"l3", LAYER_NETWORK},
+        {"network", LAYER_NETWORK},
+        {"net", LAYER_NETWORK},
+        // PDU
+        {"packet", LAYER_NETWORK},
 
-    // OSI
-    {"layer4", LAYER_TRANSPORT},
-    {"l4", LAYER_TRANSPORT},
-    {"transport", LAYER_TRANSPORT}, 
-    {"trans", LAYER_TRANSPORT},
-    // PDU
-    {"segment", LAYER_TRANSPORT},
-    {"datagram", LAYER_TRANSPORT},
+        // OSI
+        {"layer4", LAYER_TRANSPORT},
+        {"l4", LAYER_TRANSPORT},
+        {"transport", LAYER_TRANSPORT},
+        {"trans", LAYER_TRANSPORT},
+        // PDU
+        {"segment", LAYER_TRANSPORT},
+        {"datagram", LAYER_TRANSPORT},
 
-    // OSI
-    {"layer5", LAYER_SESSION},
-    {"l5", LAYER_SESSION},
-    {"session", LAYER_SESSION},
-    {"sess", LAYER_SESSION},
-    // PDU
-    {"data", LAYER_SESSION},
+        // OSI
+        {"layer5", LAYER_SESSION},
+        {"l5", LAYER_SESSION},
+        {"session", LAYER_SESSION},
+        {"sess", LAYER_SESSION},
+        // PDU
+        {"data", LAYER_SESSION},
 
-    // OSI
-    {"layer6", LAYER_PRESENTATION},
-    {"l6", LAYER_PRESENTATION},
-    {"presentation", LAYER_PRESENTATION},
-    {"pres", LAYER_PRESENTATION},
-    // PDU
-    {"data", LAYER_PRESENTATION},
+        // OSI
+        {"layer6", LAYER_PRESENTATION},
+        {"l6", LAYER_PRESENTATION},
+        {"presentation", LAYER_PRESENTATION},
+        {"pres", LAYER_PRESENTATION},
+        // PDU
+        {"data", LAYER_PRESENTATION},
 
-    // OSI
-    {"layer7", LAYER_APPLICATION},
-    {"l7", LAYER_APPLICATION},
-    {"application", LAYER_APPLICATION},
-    {"app", LAYER_APPLICATION},
-    // PDU
-    {"data", LAYER_APPLICATION}
+        // OSI
+        {"layer7", LAYER_APPLICATION},
+        {"l7", LAYER_APPLICATION},
+        {"application", LAYER_APPLICATION},
+        {"app", LAYER_APPLICATION},
+        // PDU
+        {"data", LAYER_APPLICATION}
 };
 
 static osi_layer_t current_layer = LAYER_NONE;
@@ -544,9 +556,9 @@ static bool is_layer_subcommand(const char *arg) {
 }
 
 static bool handle_option(
-    const struct Option *const cmdline_option,
-    const char *const value,
-    struct ProgramArgs *const program_args
+        const struct Option *const cmdline_option,
+        const char *const value,
+        struct ProgramArgs *const program_args
 ) {
     bool error_occured = false;
 
@@ -577,16 +589,16 @@ static bool handle_option(
             program_args->general.logger_level = LOG_WARN;
             break;
         }
-        // Advanced
+            // Advanced
         case OPTION_BYPASS_CHECKS: {
             program_args->advanced.bypass_checks = true;
             break;
         }
         case OPTION_LOGGER_LEVEL: {
             program_args->general.logger_level =
-                (log_level_t)validate_range(
-                    value, LOG_NONE, LOG_DEBUG, cmdline_option->name,
-                    &error_occured);
+                    (log_level_t)validate_range(
+                            value, LOG_NONE, LOG_DEBUG, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_NO_LOG_TIMESTAMP: {
@@ -595,9 +607,9 @@ static bool handle_option(
         }
         case OPTION_NUM_THREADS: {
             program_args->advanced.num_threads =
-                (unsigned int)validate_range(
-                    value, 0, UINT_MAX, cmdline_option->name,
-                    &error_occured);
+                    (unsigned int)validate_range(
+                            value, 0, UINT_MAX, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_TRACERT: {
@@ -614,9 +626,9 @@ static bool handle_option(
         }
         case OPTION_BUFFER_SIZE: {
             program_args->advanced.buffer_size =
-                (unsigned int)validate_range(
-                    value, 0, UIO_MAXIOV, cmdline_option->name,
-                    &error_occured);
+                    (unsigned int)validate_range(
+                            value, 0, UIO_MAXIOV, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_NO_ASYNC_SOCK: {
@@ -631,7 +643,7 @@ static bool handle_option(
             program_args->advanced.no_cpu_prefetch = true;
             break;
         }
-        // IPv4
+            // IPv4
         case OPTION_IPV4: {
             program_args->parser.current_layer = LAYER_3;
             program_args->parser.current_proto = PROTO_L3_IPV4;
@@ -643,7 +655,7 @@ static bool handle_option(
             uint32_t temp;
             if (inet_pton(AF_INET, value, &temp) != 1) {
                 logger(LOG_ERROR,
-                    "Invalid source IPv4 address: %s", value);
+                       "Invalid source IPv4 address: %s", value);
                 error_occured = true;
             }
             program_args->ipv4->saddr.address = htonl(temp);
@@ -653,10 +665,16 @@ static bool handle_option(
             uint32_t temp;
             if (inet_pton(AF_INET, value, &temp) != 1) {
                 logger(LOG_ERROR,
-                    "Invalid dest IPv4 address: %s", value);
+                       "Invalid dest IPv4 address: %s", value);
                 error_occured = true;
             }
             program_args->ipv4->daddr.address = htonl(temp);
+            break;
+        }
+        case OPTION_GATE_MAC: {
+            if (parse_mac_address(value, &program_args->gate_mac) != 0) {
+                logger(LOG_ERROR, "Invalid MAC address format. Use XX:XX:XX:XX:XX:XX");
+            }
             break;
         }
         case OPTION_IP_VER: {
@@ -676,17 +694,17 @@ static bool handle_option(
             break;
         }
         case OPTION_IP_PREC: {
-            program_args->ipv4->tos.precedence = 
-                (ip_tos_prec_t)parse_text_or_int(
-                    IP_TOS_PREC_CODES,
-                    ARRAY_SIZE(IP_TOS_PREC_CODES),
-                    value,
-                    true,
-                    0,
-                    7,
-                    cmdline_option->name,
-                    &error_occured
-                );
+            program_args->ipv4->tos.precedence =
+                    (ip_tos_prec_t)parse_text_or_int(
+                            IP_TOS_PREC_CODES,
+                            ARRAY_SIZE(IP_TOS_PREC_CODES),
+                            value,
+                            true,
+                            0,
+                            7,
+                            cmdline_option->name,
+                            &error_occured
+                    );
             break;
         }
         case OPTION_IP_MIN_DELAY: {
@@ -710,54 +728,54 @@ static bool handle_option(
             break;
         }
         case OPTION_IP_DSCP: {
-            program_args->ipv4->dscp = 
-                (ip_dscp_code_t)parse_text_or_int(
-                    IP_DSCP_CODES,
-                    ARRAY_SIZE(IP_DSCP_CODES),
-                    value,
-                    true,
-                    0,
-                    64,
-                    cmdline_option->name,
-                    &error_occured
-                );
+            program_args->ipv4->dscp =
+                    (ip_dscp_code_t)parse_text_or_int(
+                            IP_DSCP_CODES,
+                            ARRAY_SIZE(IP_DSCP_CODES),
+                            value,
+                            true,
+                            0,
+                            64,
+                            cmdline_option->name,
+                            &error_occured
+                    );
             break;
         }
         case OPTION_IP_ECN: {
-            program_args->ipv4->ecn = 
-                (ip_ecn_code_t)parse_text_or_int(
-                    IP_ECN_CODES,
-                    ARRAY_SIZE(IP_ECN_CODES),
-                    value,
-                    true,
-                    0,
-                    3,
-                    cmdline_option->name,
-                    &error_occured
-                );
+            program_args->ipv4->ecn =
+                    (ip_ecn_code_t)parse_text_or_int(
+                            IP_ECN_CODES,
+                            ARRAY_SIZE(IP_ECN_CODES),
+                            value,
+                            true,
+                            0,
+                            3,
+                            cmdline_option->name,
+                            &error_occured
+                    );
             break;
         }
         case OPTION_IP_LEN: {
             program_args->ipv4_misc.override_length = true;
 
             program_args->ipv4->len =
-                (uint16_t)validate_range(
-                    value, 0, 65535, cmdline_option->name,
-                    &error_occured);
+                    (uint16_t)validate_range(
+                            value, 0, 65535, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_IP_IDENT: {
             program_args->ipv4->id =
-                (uint16_t)validate_range(
-                    value, 0, 65535, cmdline_option->name,
-                    &error_occured);
+                    (uint16_t)validate_range(
+                            value, 0, 65535, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_IP_FLAGS: {
             program_args->ipv4->flag_bits =
-                (ip_flag_t)validate_range(
-                    value, 0, 7, cmdline_option->name,
-                    &error_occured);
+                    (ip_flag_t)validate_range(
+                            value, 0, 7, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_IP_EVIL_BIT: {
@@ -774,9 +792,9 @@ static bool handle_option(
         }
         case OPTION_IP_FRAG_OFS: {
             program_args->ipv4->fragofs =
-                (uint16_t)validate_range(
-                    value, 0, 8191, cmdline_option->name,
-                    &error_occured);
+                    (uint16_t)validate_range(
+                            value, 0, 8191, cmdline_option->name,
+                            &error_occured);
             break;
         }
         case OPTION_IP_TTL: {
@@ -786,17 +804,17 @@ static bool handle_option(
             break;
         }
         case OPTION_IP_PROTO: {
-            program_args->ipv4->proto = 
-                (ip_proto_t)parse_text_or_int(
-                    IP_PROTOCOLS,
-                    ARRAY_SIZE(IP_PROTOCOLS),
-                    value,
-                    true,
-                    0,
-                    255,
-                    cmdline_option->name,
-                    &error_occured
-                );
+            program_args->ipv4->proto =
+                    (ip_proto_t)parse_text_or_int(
+                            IP_PROTOCOLS,
+                            ARRAY_SIZE(IP_PROTOCOLS),
+                            value,
+                            true,
+                            0,
+                            255,
+                            cmdline_option->name,
+                            &error_occured
+                    );
             break;
         }
         case OPTION_IP_CHECKSUM: {
@@ -811,7 +829,7 @@ static bool handle_option(
             // TODO: options
             break;
         }
-        // IPv6
+            // IPv6
         case OPTION_IPV6: {
             program_args->parser.current_layer = LAYER_3;
             program_args->parser.current_proto = PROTO_L3_IPV6;
@@ -826,26 +844,26 @@ static bool handle_option(
         case OPTION_IP6_FLOW_LABEL: {
             break;
         }
-        // unfinished
-        // TCP Header
+            // unfinished
+            // TCP Header
         case OPTION_TCP: {
             program_args->parser.current_layer = LAYER_4;
             program_args->parser.current_proto = PROTO_L4_TCP;
             break;
         }
-        // UDP Header
+            // UDP Header
         case OPTION_UDP: {
             program_args->parser.current_layer = LAYER_4;
             program_args->parser.current_proto = PROTO_L4_UDP;
             break;
         }
-        // ICMP Header
+            // ICMP Header
         case OPTION_ICMP: {
             program_args->parser.current_layer = LAYER_4;
             program_args->parser.current_proto = PROTO_L4_ICMP;
             break;
         }
-        // Null Option (this shouldn't happen)
+            // Null Option (this shouldn't happen)
         case OPTION_NONE:
         default: {
             logger(LOG_CRIT, "Null option given, somehow.");
@@ -858,9 +876,9 @@ static bool handle_option(
 
 
 int parse_args(
-    const int argc,
-    char *const argv[],
-    struct ProgramArgs *const program_args
+        const int argc,
+        char *const argv[],
+        struct ProgramArgs *const program_args
 ) {
     program_args->diagnostics.executable_name = argv[0];
 
@@ -906,40 +924,40 @@ int parse_args(
 
             for (size_t j = 0; j < ARRAY_SIZE(OPTIONS); j++) {
                 const size_t opt_len =
-                    strlen(OPTIONS[j].name);
+                        strlen(OPTIONS[j].name);
 
                 // Check if the current argument is a valid option
                 if (strncmp(opt_name, OPTIONS[j].name, opt_len) == 0 &&
                     (opt_name[opt_len] == '\0' ||
-                    opt_name[opt_len] == '=')
-                ) {
+                     opt_name[opt_len] == '=')
+                        ) {
                     // Check if the argument contains an optional
                     // '=' sign, as well as where it's located.
                     const char *const has_equal =
-                        strchr(opt_name, '=');
+                            strchr(opt_name, '=');
 
                     // If so, the value will come after the =
                     if (has_equal) {
                         opt_val = has_equal + 1;
                     }
                     else if (i + 1 < argc && argv[i + 1][0] != '-'
-                        && argv[i + 1][0] != '/'
-                    ) {
+                             && argv[i + 1][0] != '/'
+                            ) {
                         opt_val = argv[++i];
                     }
 
                     if (OPTIONS[j].has_arg && (!opt_val
-                        || opt_val[0] == '\0' || opt_val[0] == ' ')
-                    ) {
+                                               || opt_val[0] == '\0' || opt_val[0] == ' ')
+                            ) {
                         logger(LOG_ERROR,
-                            "Option \"--%s\" requires an argument!",
-                            OPTIONS[j].name
+                               "Option \"--%s\" requires an argument!",
+                               OPTIONS[j].name
                         );
                         return 1;
                     }
 
                     bool error_occured = handle_option(
-                        &OPTIONS[j], opt_val, program_args);
+                            &OPTIONS[j], opt_val, program_args);
 
                     if (error_occured) {
                         return 1;
@@ -947,12 +965,12 @@ int parse_args(
 
                     break;
                 }
-                // Compared all options and found no valid match
+                    // Compared all options and found no valid match
                 else if (j == ARRAY_SIZE(OPTIONS)-1) {
                     logger(LOG_ERROR,
-                        "\"--%s\" is not a known option;\n"
-                        "use \"--help\" for more information.",
-                        opt_name
+                           "\"--%s\" is not a known option;\n"
+                           "use \"--help\" for more information.",
+                           opt_name
                     );
                     return 1;
                 }

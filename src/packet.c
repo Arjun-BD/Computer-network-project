@@ -1006,11 +1006,9 @@ static int send_loop_dpdk(void *arg) {
     const struct ProgramArgs *const program_args =
             (const struct ProgramArgs *const)arg;
 
-    // --- !! IMPORTANT: SET THIS !! ---
-    // Find this with `ip neigh` or `arp -a` for your gateway/destination
-    const struct rte_ether_addr dest_mac = {
-            .addr_bytes = {0x00, 0x00, 0x5e, 0x00, 0x01, 0x01}
-    };
+    char mac_str[18];
+    rte_ether_format_addr(mac_str, sizeof(mac_str), &program_args->gate_mac);
+    logger(LOG_INFO, "DPDK: Using gateway MAC: %s", mac_str);
     // ---------------------------------
 
     _Alignas (_Alignof (max_align_t)) uint8_t
@@ -1028,7 +1026,7 @@ static int send_loop_dpdk(void *arg) {
     // --- 1. Build Ethernet Header ---
     eth_header->ether_type = htons(RTE_ETHER_TYPE_IPV4);
     eth_header->src_addr = program_args->port_mac; // From Step 2
-    eth_header->dst_addr = dest_mac;               // The hardcoded one
+    eth_header->dst_addr = program_args->gate_mac; // The hardcoded one
 
     // --- 2. Build IP Header ---
     *ip_header = *(program_args->ipv4);
@@ -1037,6 +1035,8 @@ static int send_loop_dpdk(void *arg) {
     ip_header->proto = IPPROTO_UDP;
     // Set checksum to 0; HW offload will do it
     ip_header->chksum = 0;
+
+    logger(LOG_INFO, "DPDK: Source IP Address: %s", inet_ntoa(*(struct in_addr*)&ip_header->saddr.address));
 
     // --- 3. Build UDP Header ---
     *udp_header = (struct udp_hdr){
